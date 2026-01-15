@@ -84,6 +84,7 @@ def star_coupler(
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (1, 0),
     npoints: int = 361,
+    taper_overlap: float = 0.1,
 ) -> gf.Component:
     """Star Coupler complet : FPR + tapers d'entrée (gauche) + tapers de sortie (droite).
 
@@ -134,6 +135,14 @@ def star_coupler(
         o2_center = tref.ports["o2"].center
         dx = x_arc - o2_center[0]
         dy = y - o2_center[1]
+
+        # Ajout de l'overlap
+        if taper_overlap != 0:
+            overlap_dx = -taper_overlap * np.cos(theta)
+            overlap_dy = -taper_overlap * np.sin(theta)
+            dx += overlap_dx
+            dy += overlap_dy
+
         tref.move((dx, dy))
         # Exposer le port de sortie (côté étroit, vers la droite)
         c.add_port(name=f"e{i+1}", port=tref.ports["o1"])
@@ -167,11 +176,21 @@ def star_coupler(
         o2_center = tref.ports["o2"].center
         dx = x_arc - o2_center[0]
         dy = y - o2_center[1]
+
+        # Ajout de l'overlap
+        if taper_overlap != 0:
+            overlap_dx = taper_overlap * np.cos(theta)
+            overlap_dy = -taper_overlap * np.sin(theta)
+            dx += overlap_dx
+            dy += overlap_dy
+            
         tref.move((dx, dy))
         # Exposer le port d'entrée (côté étroit, vers la gauche)
         c.add_port(name=f"o{i+1}", port=tref.ports["o1"])
 
-
+    # Reposition component origin to be at the bottom-left corner
+    bbox = c.bbox()
+    c.move(origin=(0, 0), destination=(-bbox.left, -bbox.bottom))
     return c
 
 
