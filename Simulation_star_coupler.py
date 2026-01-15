@@ -25,11 +25,9 @@ ubcpdk.PDK.activate()
 
 c_original = star_coupler(n_inputs=3, n_outputs=4)
 print("Original component:", c_original)
-c_copy = c_original.copy()
-print("Copied component:", c_copy)
-c_flat = c_copy.flatten()
-print("Flattened component:", c_flat)
-c = c_flat
+# The new star_coupler is "born flat", so we don't need to call flatten().
+c = c_original.copy()
+print("Component is already flat by design, passing a copy to the simulator.")
 #c.show()
 
 # 2. Récupération du LayerStack corrigé
