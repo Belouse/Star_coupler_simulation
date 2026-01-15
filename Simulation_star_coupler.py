@@ -17,6 +17,15 @@ import gdsfactory as gf
 import gplugins.lumerical as sim
 from components.star_coupler import star_coupler
 import lumapi
+import gdsfactory.components.containers.extension as gf_extension
+
+# Patch extend_ports to disable kfactory grid-instance checks for rotated tapers
+gf.components.extend_ports = gf.cell(check_instances=False)(
+    gf.components.extend_ports.__wrapped__
+)
+gf_extension.extend_ports = gf.cell(check_instances=False)(
+    gf_extension.extend_ports.__wrapped__
+)
 
 print("--- Simulation Lumerical FDTD pour Star Coupler ---")
 # 1. Activation du PDK et chargement du composant
@@ -56,7 +65,7 @@ with lumapi.FDTD(hide=False) as fdtd:
         wavelength_stop=1.6,
         wavelength_points=50,
         mesh_accuracy=2,
-        run=True, # Mettre à False pour inspecter le fichier dans Lumerical avant de calculer
+        run=False, # Mettre à False pour inspecter le fichier dans Lumerical avant de calculer
     )
 
 # 5. Analyse de la Phase

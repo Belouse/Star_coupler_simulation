@@ -136,24 +136,7 @@ def _transform_points_and_port(
 
     return transformed_points_list, new_port
 
-"""
-n_inputs=5,
-        n_outputs=4,
-        pitch_inputs=5.2790946,
-        pitch_outputs=5.2742795,
-        angle_inputs=True,
-        angle_outputs=True,
-        taper_length=40.0,
-        taper_wide=3.0,
-        wg_width=0.5,
-        radius=130.0,
-        width_rect=80.344,
-        height_rect=152.824,
-        layer=(1, 0),
-        clad_layer=(111,0),
-        clad_offset=3.0,
-        npoints=361,
-"""
+
 @gf.cell(check_instances=False)
 def star_coupler(
     n_inputs: int = 3,
@@ -179,6 +162,12 @@ def star_coupler(
     This component is built by manually adding and transforming polygons
     to avoid using instances and the flatten() method.
     """
+    grid = getattr(gf.get_active_pdk(), "grid", 1e-3)
+
+    def _snap_center(center):
+        """Snap a 2D point to the PDK grid to avoid off-grid port placement."""
+        return tuple(np.round(np.asarray(center) / grid) * grid)
+
     c = gf.Component()
 
     # 1. Add FPR Slab Polygons (already centered at 0,0)
@@ -233,7 +222,7 @@ def star_coupler(
         # Add port directly
         c.add_port(
             name=f"e{i+1}",
-            center=final_port['center'],
+            center=_snap_center(final_port['center']),
             width=final_port['width'],
             orientation=final_port['orientation'],
             layer=layer
@@ -268,7 +257,7 @@ def star_coupler(
         # Add port directly
         c.add_port(
             name=f"o{i+1}",
-            center=final_port['center'],
+            center=_snap_center(final_port['center']),
             width=final_port['width'],
             orientation=final_port['orientation'],
             layer=layer
