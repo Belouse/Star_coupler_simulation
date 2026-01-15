@@ -30,7 +30,7 @@ print("Copied component:", c_copy)
 c_flat = c_copy.flatten()
 print("Flattened component:", c_flat)
 c = c_flat
-c.show()
+#c.show()
 
 # 2. Récupération du LayerStack corrigé
 layer_stack = gf.get_active_pdk().layer_stack
