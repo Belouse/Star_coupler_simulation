@@ -1,0 +1,5 @@
+.vscode/
+.vs/
+cache
+temp/
+.cache/
