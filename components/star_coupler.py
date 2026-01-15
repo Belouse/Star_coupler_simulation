@@ -1,8 +1,9 @@
 import numpy as np
 import gdsfactory as gf
-from typing import Tuple
+from typing import Tuple, Optional
 from math import asin, sqrt
 from ubcpdk import components as pdk_components
+from shapely.geometry import Polygon as ShapelyPolygon
 
 
 @gf.cell
@@ -12,6 +13,8 @@ def fpr_slab(
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (1, 0),
     npoints: int = 361,
+    clad_layer: Optional[Tuple[int, int]] = (111, 0),
+    clad_offset: float = 3.0,
 ) -> gf.Component:
     """FPR en capsule : rectangle central + deux arcs de même rayon.
 
@@ -65,6 +68,16 @@ def fpr_slab(
     points = np.column_stack([poly_x, poly_y])
     c.add_polygon(points, layer=layer)
 
+    if clad_layer and clad_offset > 0:
+        shapely_poly = ShapelyPolygon(points)
+        clad_poly = shapely_poly.buffer(clad_offset)
+        clad_points = np.array(clad_poly.exterior.coords)
+        c.add_polygon(clad_points, layer=clad_layer)
+
+    bbox = c.bbox()
+    if bbox is not None:
+        c.move(origin=(0, 0), destination=(-bbox.left, -bbox.bottom))
+
     return c
 
 
@@ -84,6 +97,9 @@ def star_coupler(
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (1, 0),
     npoints: int = 361,
+    taper_overlap: float = 0.1,
+    clad_layer: Optional[Tuple[int, int]] = (111, 0),
+    clad_offset: float = 3.0,
 ) -> gf.Component:
     """Star Coupler complet : FPR + tapers d'entrée (gauche) + tapers de sortie (droite).
 
@@ -95,13 +111,53 @@ def star_coupler(
     """
     c = gf.Component()
 
+    @gf.cell
+    def taper_with_clad(
+        clad_layer: Optional[Tuple[int, int]], clad_offset: float
+    ) -> gf.Component:
+        taper_core = (
+            pdk_components.ebeam_routing_taper_te1550_w500nm_to_w3000nm_L40um()
+        )
+
+        taper_cell = gf.Component()
+        core_ref = taper_cell << taper_core
+
+        if clad_layer and clad_offset > 0:
+            bbox = taper_core.bbox()
+            if bbox is not None:
+                clad_rect = gf.components.rectangle(
+                    size=(
+                        bbox.right - bbox.left + 2 * clad_offset,
+                        bbox.top - bbox.bottom + 2 * clad_offset,
+                    ),
+                    layer=clad_layer,
+                )
+                clad_ref = taper_cell << clad_rect
+                clad_ref.center = (
+                    (bbox.left + bbox.right) / 2,
+                    (bbox.bottom + bbox.top) / 2,
+                )
+
+        bbox = taper_cell.bbox()
+        if bbox is not None:
+            taper_cell.move(origin=(0, 0), destination=(-bbox.left, -bbox.bottom))
+
+        taper_cell.add_ports(core_ref.ports)
+        return taper_cell
+
     slab = c << fpr_slab(
         radius=radius,
         width_rect=width_rect,
         height_rect=height_rect,
         layer=layer,
         npoints=npoints,
+        clad_layer=clad_layer,
+        clad_offset=clad_offset,
     )
+    # Since fpr_slab is now aligned at its bottom-left, we need to place it relative to that
+    # For simplicity, let's keep the star coupler centered around (0,0) for now
+    # and adjust placement if boundary errors persist.
+    slab.center = (0, 0)
 
     half_h = height_rect / 2
     radius_eff = max(radius, half_h)
@@ -115,7 +171,11 @@ def star_coupler(
     y_positions_out = offsets_out * pitch_outputs
 
     if np.max(np.abs(y_positions_out)) > half_h:
-        raise ValueError("Outputs exceed FPR height; reduce pitch_outputs or n_outputs.")
+        raise ValueError(
+            "Outputs exceed FPR height; reduce pitch_outputs or n_outputs."
+        )
+
+    taper_to_place = taper_with_clad(clad_layer=clad_layer, clad_offset=clad_offset)
 
     for i, y in enumerate(y_positions_out):
         # Angle local sur l'arc (si on suit la courbure)
@@ -124,16 +184,21 @@ def star_coupler(
 
         orient_deg = np.degrees(theta) if angle_outputs else 0.0
 
-        # Utiliser le taper du PDK SiEPIC UBC (L40um, 500nm->3000nm)
-        taper = pdk_components.ebeam_routing_taper_te1550_w500nm_to_w3000nm_L40um()
-
-        tref = c << taper
+        tref = c << taper_to_place
         # Orienter pour que o2 (large) soit perpendiculaire à l'arc (ou horizontal)
         tref.rotate(orient_deg - 180)
         # Placer la partie large sur l'arc : translation de o2 vers (x_arc, y)
         o2_center = tref.ports["o2"].center
         dx = x_arc - o2_center[0]
         dy = y - o2_center[1]
+
+        # Ajout de l'overlap
+        if taper_overlap != 0:
+            overlap_dx = -taper_overlap * np.cos(theta)
+            overlap_dy = -taper_overlap * np.sin(theta)
+            dx += overlap_dx
+            dy += overlap_dy
+
         tref.move((dx, dy))
         # Exposer le port de sortie (côté étroit, vers la droite)
         c.add_port(name=f"e{i+1}", port=tref.ports["o1"])
@@ -157,20 +222,24 @@ def star_coupler(
         # Orientation du taper (180° inversé pour côté gauche)
         orient_deg = (180 - np.degrees(theta)) if angle_inputs else 180.0
 
-        # Utiliser le même taper du PDK
-        taper = pdk_components.ebeam_routing_taper_te1550_w500nm_to_w3000nm_L40um()
-
-        tref = c << taper
+        tref = c << taper_to_place
         # Orienter pour que o2 (large) soit perpendiculaire à l'arc (ou horizontal)
         tref.rotate(orient_deg - 180)
         # Placer la partie large sur l'arc : translation de o2 vers (x_arc, y)
         o2_center = tref.ports["o2"].center
         dx = x_arc - o2_center[0]
         dy = y - o2_center[1]
+
+        # Ajout de l'overlap
+        if taper_overlap != 0:
+            overlap_dx = taper_overlap * np.cos(theta)
+            overlap_dy = -taper_overlap * np.sin(theta)
+            dx += overlap_dx
+            dy += overlap_dy
+
         tref.move((dx, dy))
         # Exposer le port d'entrée (côté étroit, vers la gauche)
         c.add_port(name=f"o{i+1}", port=tref.ports["o1"])
-
 
     return c
 
