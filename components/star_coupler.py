@@ -199,6 +199,14 @@ def star_coupler(
             dx += overlap_dx
             dy += overlap_dy
 
+
+        # Ajout de l'overlap
+        if taper_overlap != 0:
+            overlap_dx = -taper_overlap * np.cos(theta)
+            overlap_dy = -taper_overlap * np.sin(theta)
+            dx += overlap_dx
+            dy += overlap_dy
+
         tref.move((dx, dy))
         # Exposer le port de sortie (côté étroit, vers la droite)
         c.add_port(name=f"e{i+1}", port=tref.ports["o1"])
