@@ -1,0 +1,9 @@
+{
+    "python.defaultInterpreterPath": "python",
+    "chat.tools.terminal.autoApprove": {
+        "/^cd \"c:\\\\Users\\\\Éloi Blouin\\\\OneDrive - Université Laval\\\\École\\\\Ulaval zMaster\\\\GEL-7070\\\\Star_coupler_simulation\" ; python components\\\\star_coupler\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
