@@ -145,42 +145,42 @@ material_name_to_lumerical = {
     "si": "Si (Silicon) - Palik",
     "sio2": "SiO2 (Glass) - Palik",
 }
-
 # 4. Lancement de la simulation
-# Cette fonction génère le .fsp, place les ports et lance le solveur
-# Note : mesh_accuracy=2 est bien pour tester, passez à 3 ou 4 pour la précision finale
+print("Ouverture de Lumerical...")
 
-# Création d'une session Lumerical
-# Le mode "hide" permet de ne pas afficher l'interface graphique de Lumerical
-with lumapi.FDTD(hide=False) as fdtd:
-    results = sim.write_sparameters_lumerical(
-        c,
+# On crée l'objet session pour garder la main dessus
+fdtd = lumapi.FDTD(hide=False)
+
+# Récupération du dossier courant pour la sauvegarde
+import os
+current_dir = os.getcwd()
+
+try:
+    print("Construction de la simulation dans Lumerical...")
+    
+    # ON RETIRE 'filepath' qui causait l'erreur
+    # La fonction va utiliser le nom du composant pour les fichiers temporaires
+    sim.write_sparameters_lumerical(
+        component=c,
         session=fdtd,
         layer_stack=layer_stack,
         material_name_to_lumerical=material_name_to_lumerical,
-        wavelength_start=1.5,
-        wavelength_stop=1.6,
-        wavelength_points=25,
+        wavelength_start=1.55,
+        wavelength_stop=1.55,
+        wavelength_points=1,
         mesh_accuracy=1,
-        run=True, # Mettre à False pour inspecter le fichier dans Lumerical avant de calculer
+        run=False,        # On ne lance pas le calcul, on veut juste construire la scène
+        dirpath=current_dir 
     )
-
-# 5. Analyse de la Phase
-# On récupère les paramètres S (coefficients de transmission complexes)
-# Les entrées sont nommées o1, o2, o3 et les sorties e1, e2, e3, e4 (selon votre code)
-s_params = results
-
-# Longueur d'onde centrale (indice 25 pour 50 points)
-idx = 25 
-
-print("--- Résultats de Phase (Port d'entrée #1) ---")
-# On calcule la phase relative entre les sorties successives
-for i in range(1, 4):
-    trans_current = s_params[f"o1@0,e{i}@0"][idx]
-    trans_next = s_params[f"o1@0,e{i+1}@0"][idx]
     
-    phase_diff = np.angle(trans_next) - np.angle(trans_current)
-    # Normalisation entre -pi et pi
-    phase_diff = (phase_diff + np.pi) % (2 * np.pi) - np.pi
-    
-    print(f"Déphasage entre e{i} et e{i+1}: {phase_diff/np.pi:.3f} * π")
+    # SAUVEGARDE MANUELLE EXPLICITE
+    # C'est ici qu'on définit le nom du fichier .fsp final
+    filename = "star_coupler_manual.fsp"
+    save_path = os.path.join(current_dir, filename)
+    fdtd.save(save_path)
+    print("succes")
+
+except Exception as e:
+    print(f"Une erreur est survenue : {e}")
+    # On ne ferme pas la session pour permettre le débogage visuel
+    pass
