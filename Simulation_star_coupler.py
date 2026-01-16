@@ -67,10 +67,14 @@ sim.write_sparameters_lumerical = _create_patched_write_sparameters(_original_wr
 
 def fix_port_orientations_for_lumerical(component):
     """
-    Create a component with all ports set to 0° orientation.
+    Create a component with simplified port orientations for Lumerical.
     
-    Since the tapers have very small angles, setting ports to 0° (straight)
-    is a good approximation and eliminates the orientation validation problem.
+    Since the tapers have very small angles, we approximate:
+    - Output ports (e*): 0° (pointing right/outward)
+    - Input ports (o*): 180° (pointing left/inward)
+    
+    This eliminates the orientation validation problem while maintaining
+    the correct propagation direction.
     """
     # Create a new component that references the original
     c = gf.Component(f"{component.name}_lum")
@@ -78,19 +82,29 @@ def fix_port_orientations_for_lumerical(component):
     # Instance the original component  
     ref = c << component
     
-    # Collect port information with orientation set to 0
+    # Collect port information with simplified orientations
     ports_data = []
     for port in component.ports:
+        # Determine orientation based on port name
+        # Output ports (e1, e2, e3, e4) point outward at 0°
+        # Input ports (o1, o2, o3) point inward at 180°
+        if port.name.startswith('e'):
+            orientation = 0  # Output ports point right
+        elif port.name.startswith('o'):
+            orientation = 180  # Input ports point left
+        else:
+            orientation = 0  # Default
+        
         ports_data.append({
             'name': port.name,
             'center': tuple(port.center),
             'width': port.width,
-            'orientation': 0,  # Set all ports to 0° (straight)
+            'orientation': orientation,
             'layer': port.layer,
             'port_type': port.port_type
         })
     
-    # Add all ports with 0° orientation
+    # Add all ports with corrected orientations
     for port_info in ports_data:
         c.add_port(**port_info)
     
@@ -146,8 +160,8 @@ with lumapi.FDTD(hide=False) as fdtd:
         material_name_to_lumerical=material_name_to_lumerical,
         wavelength_start=1.5,
         wavelength_stop=1.6,
-        wavelength_points=50,
-        mesh_accuracy=2,
+        wavelength_points=25,
+        mesh_accuracy=1,
         run=True, # Mettre à False pour inspecter le fichier dans Lumerical avant de calculer
     )
 
