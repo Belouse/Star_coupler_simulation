@@ -102,6 +102,14 @@ def get_taper_polygons_and_ports(
     return polygons, ports
 
 
+def _normalize_angle(angle_deg: float) -> float:
+    """Normalize angle to range [-180, 180) for gdsfactory/Lumerical compatibility."""
+    angle = angle_deg % 360
+    if angle >= 180:
+        angle -= 360
+    return angle
+
+
 def _transform_points_and_port(
     points_list: List[np.ndarray],
     port: dict,
@@ -125,7 +133,8 @@ def _transform_points_and_port(
     # Transform port
     center = np.array(port['center'])
     new_center = center @ rot_matrix.T + np.array([move_x, move_y])
-    new_orientation = (port['orientation'] + rotation_deg) % 360
+    # Normalize orientation to [-180, 180) range
+    new_orientation = _normalize_angle(port['orientation'] + rotation_deg)
     
     new_port = {
         'name': port['name'],

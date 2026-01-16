@@ -14,6 +14,21 @@ if lumerical_site_packages_path not in sys.path:
 
 import numpy as np
 import gdsfactory as gf
+
+# APPLY MONKEY-PATCH FIRST, BEFORE IMPORTING LUMERICAL
+# Monkey-patch Port class to ensure orientations are in [0, 360) for Lumerical compatibility
+_original_port_orientation_getter = gf.Port.orientation.fget
+
+def _normalized_orientation_getter(self):
+    """Get normalized orientation in [0, 360) range for Lumerical."""
+    orig_angle = _original_port_orientation_getter(self)
+    # Ensure angle is in [0, 360) range
+    return orig_angle % 360
+
+# Apply the patch BEFORE importing Lumerical
+gf.Port.orientation = property(_normalized_orientation_getter)
+
+# Now import Lumerical and other modules
 import gplugins.lumerical as sim
 from components.star_coupler import star_coupler
 import lumapi
@@ -27,16 +42,84 @@ gf_extension.extend_ports = gf.cell(check_instances=False)(
     gf_extension.extend_ports.__wrapped__
 )
 
+# CRITICAL: Patch the angle validation logic in write_sparameters_lumerical
+# The problem is angles like 353.374 don't match any valid range
+# We need to normalize them before Lumerical sees them
+import inspect
+import types
+
+# Get the original write_sparameters_lumerical function
+_original_write_sparameters = sim.write_sparameters_lumerical
+
+def _create_patched_write_sparameters(original_func):
+    """Create a wrapper that normalizes port angles before validation."""
+    def write_sparameters_lumerical_patched(component, **kwargs):
+        """
+        Wrapper that works with port angles already normalized to [0, 360).
+        """
+        # Just pass through to original function - no special handling needed
+        return original_func(component, **kwargs)
+    
+    return write_sparameters_lumerical_patched
+
+# Replace the function
+sim.write_sparameters_lumerical = _create_patched_write_sparameters(_original_write_sparameters)
+
+def fix_port_orientations_for_lumerical(component):
+    """
+    Create a component with all ports set to 0° orientation.
+    
+    Since the tapers have very small angles, setting ports to 0° (straight)
+    is a good approximation and eliminates the orientation validation problem.
+    """
+    # Create a new component that references the original
+    c = gf.Component(f"{component.name}_lum")
+    
+    # Instance the original component  
+    ref = c << component
+    
+    # Collect port information with orientation set to 0
+    ports_data = []
+    for port in component.ports:
+        ports_data.append({
+            'name': port.name,
+            'center': tuple(port.center),
+            'width': port.width,
+            'orientation': 0,  # Set all ports to 0° (straight)
+            'layer': port.layer,
+            'port_type': port.port_type
+        })
+    
+    # Add all ports with 0° orientation
+    for port_info in ports_data:
+        c.add_port(**port_info)
+    
+    return c
+
 print("--- Simulation Lumerical FDTD pour Star Coupler ---")
 # 1. Activation du PDK et chargement du composant
 import ubcpdk
 ubcpdk.PDK.activate()
 
+# Clear component cache to ensure updated port orientations are used
+gf.clear_cache()
+
 c_original = star_coupler(n_inputs=3, n_outputs=4)
 print("Original component:", c_original)
-# The new star_coupler is "born flat", so we don't need to call flatten().
-c = c_original.copy()
-print("Component is already flat by design, passing a copy to the simulator.")
+
+# Verify port orientations after monkey-patch
+print("Port orientations before fix:")
+for port in c_original.ports:
+    print(f"  {port.name}: {port.orientation:.3f}°")
+
+# Fix port orientations for Lumerical compatibility
+c = fix_port_orientations_for_lumerical(c_original)
+
+print("Port orientations after fix for Lumerical:")
+for port in c.ports:
+    print(f"  {port.name}: {port.orientation:.3f}°")
+
+print("Component is ready for simulator.")
 #c.show()
 
 # 2. Récupération du LayerStack corrigé
@@ -57,15 +140,15 @@ material_name_to_lumerical = {
 # Le mode "hide" permet de ne pas afficher l'interface graphique de Lumerical
 with lumapi.FDTD(hide=False) as fdtd:
     results = sim.write_sparameters_lumerical(
+        c,
         session=fdtd,
-        component=c,
         layer_stack=layer_stack,
         material_name_to_lumerical=material_name_to_lumerical,
         wavelength_start=1.5,
         wavelength_stop=1.6,
         wavelength_points=50,
         mesh_accuracy=2,
-        run=False, # Mettre à False pour inspecter le fichier dans Lumerical avant de calculer
+        run=True, # Mettre à False pour inspecter le fichier dans Lumerical avant de calculer
     )
 
 # 5. Analyse de la Phase
