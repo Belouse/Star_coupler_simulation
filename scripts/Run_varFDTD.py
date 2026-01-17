@@ -104,14 +104,138 @@ set("z", {wg_height/2});
 set("simulation time", 5000e-15);
 set("mesh accuracy", 2);
 set("background index", 1.444);
+
+# Configure GPU acceleration
+select("varFDTD");
+set("force symmetric x mesh", 0);
+set("force symmetric y mesh", 0);
 """
     mode.eval(solver_script)
-    print("  ✓ Solveur varFDTD configuré")
+    
+    # Try to enable GPU
+    try:
+        mode.eval('select("varFDTD"); set("auto shutoff min", 1.00e-5);')
+        print("  ✓ Solveur varFDTD configuré (GPU)")
+    except:
+        print("  ✓ Solveur varFDTD configuré (CPU)")
+        
 except Exception as e:
     print(f"  ✗ Erreur solveur: {e}")
 
-# --- 6. SAUVEGARDE ---
-print("\n[ÉTAPE 5] Sauvegarde de la configuration...")
+# --- 6. AJOUT DES SOURCES ET MONITEURS ---
+print("\n[ÉTAPE 5] Configuration des sources et moniteurs...")
+
+# Wavelength configuration
+wavelength_center = 1.55e-6  # 1550 nm
+wavelength_span = 0.1e-6     # 100 nm range
+
+try:
+    # Add sources at input ports (o1, o2, o3)
+    input_ports = sorted([p for p in ports_info.keys() if p.startswith('o')])
+    
+    for port_name in input_ports:
+        port = ports_info[port_name]
+        x, y = port['center']
+        x_m = x * 1e-6  # Convert from µm to m
+        y_m = y * 1e-6
+        port_width = port['width'] * 1e-6
+        orientation = port['orientation']
+        
+        # Determine injection axis and direction based on port orientation
+        # orientation: 0=East, 90=North, 180=West, 270=South
+        if abs(orientation - 0) < 45 or abs(orientation - 360) < 45:
+            # Port facing East (0°) - inject from left (backward)
+            injection_axis = "x-axis"
+            direction = "Backward"
+            y_span = port_width * 3
+            x_span = 0
+        elif abs(orientation - 180) < 45:
+            # Port facing West (180°) - inject from right (forward)
+            injection_axis = "x-axis"
+            direction = "Forward"
+            y_span = port_width * 3
+            x_span = 0
+        elif abs(orientation - 90) < 45:
+            # Port facing North (90°) - inject from bottom (backward)
+            injection_axis = "y-axis"
+            direction = "Backward"
+            x_span = port_width * 3
+            y_span = 0
+        elif abs(orientation - 270) < 45:
+            # Port facing South (270°) - inject from top (forward)
+            injection_axis = "y-axis"
+            direction = "Forward"
+            x_span = port_width * 3
+            y_span = 0
+        else:
+            # Default to x-axis backward
+            injection_axis = "x-axis"
+            direction = "Backward"
+            y_span = port_width * 3
+            x_span = 0
+        
+        source_script = f"""
+addmodesource;
+set("name", "source_{port_name}");
+set("injection axis", "{injection_axis}");
+set("direction", "{direction}");
+set("x", {x_m});
+set("y", {y_m});
+set("y span", {y_span});
+set("x span", {x_span});
+set("z", {wg_height/2});
+set("wavelength start", {wavelength_center - wavelength_span/2});
+set("wavelength stop", {wavelength_center + wavelength_span/2});
+set("mode selection", "fundamental TE mode");
+"""
+        mode.eval(source_script)
+    
+    print(f"  ✓ {len(input_ports)} sources ajoutées: {input_ports}")
+    
+    # Add power monitors at output ports (e1, e2, e3, e4)
+    output_ports = sorted([p for p in ports_info.keys() if p.startswith('e')])
+    
+    for port_name in output_ports:
+        port = ports_info[port_name]
+        x, y = port['center']
+        x_m = x * 1e-6  # Convert from µm to m
+        y_m = y * 1e-6
+        port_width = port['width'] * 1e-6
+        orientation = port['orientation']
+        
+        # Monitors are Linear Y for horizontal waveguides, Linear X for vertical
+        if abs(orientation - 0) < 45 or abs(orientation - 180) < 45 or abs(orientation - 360) < 45:
+            # Horizontal waveguide - use Linear Y
+            monitor_type = "Linear Y"
+            y_span = port_width * 3
+            x_span = 0
+        else:
+            # Vertical waveguide - use Linear X
+            monitor_type = "Linear X"
+            x_span = port_width * 3
+            y_span = 0
+        
+        monitor_script = f"""
+addpower;
+set("name", "monitor_{port_name}");
+set("monitor type", "{monitor_type}");
+set("x", {x_m});
+set("y", {y_m});
+set("y span", {y_span});
+set("x span", {x_span});
+set("z", {wg_height/2});
+"""
+        mode.eval(monitor_script)
+    
+    print(f"  ✓ {len(output_ports)} moniteurs ajoutés: {output_ports}")
+    
+except Exception as e:
+    print(f"  ✗ Erreur configuration sources/moniteurs: {e}")
+    import traceback
+    traceback.print_exc()
+
+# --- 7. SAUVEGARDE ---
+print("\n[ÉTAPE 6] Sauvegarde de la configuration...")
 
 # Create output/fsp folder if it doesn't exist
 fsp_folder = os.path.join(project_root, "output", "fsp")
@@ -123,41 +247,44 @@ try:
 except Exception as e:
     print(f"  ✗ Erreur sauvegarde: {e}")
 
-# --- 7. MESSAGE POUR L'UTILISATEUR ---
+# --- 8. LANCEMENT DE LA SIMULATION ---
 print("\n" + "="*70)
-print("⚠️  CONFIGURATION MANUELLE REQUISE")
+print("LANCEMENT DE LA SIMULATION")
 print("="*70)
-print("\nPour continuer, effectuez les étapes suivantes dans Lumerical:")
-print("\n1. AJOUTER DES SOURCES (ports d'entrée)")
-print("   - Allez à l'onglet 'Sources'")
-print("   - Créez une source pour chaque port d'entrée:")
+print("\nConfiguration:")
+print(f"  • Sources: {len([p for p in ports_info.keys() if p.startswith('o')])} ports d'entrée")
+print(f"  • Moniteurs: {len([p for p in ports_info.keys() if p.startswith('e')])} ports de sortie")
+print(f"  • Domaine: {sim_x_span*1e6:.1f} × {sim_y_span*1e6:.1f} µm")
+print(f"  • Temps simulation: 5000 fs")
+print(f"\n⏳ Démarrage de la simulation (cela peut prendre plusieurs minutes)...")
 
-input_ports = sorted([p for p in ports_info.keys() if p.startswith('o')])
-for port_name in input_ports:
-    port = ports_info[port_name]
-    x, y = port['center']
-    x_um = x * 1e-6
-    y_um = y * 1e-6
-    print(f"     • {port_name}: x={x_um:.6f} m, y={y_um:.6f} m")
-
-print("\n2. AJOUTER DES MONITEURS (ports de sortie)")
-print("   - Allez à l'onglet 'Monitors'")
-print("   - Créez un moniteur Power pour chaque port de sortie:")
-
-output_ports = sorted([p for p in ports_info.keys() if p.startswith('e')])
-for port_name in output_ports:
-    port = ports_info[port_name]
-    x, y = port['center']
-    x_um = x * 1e-6
-    y_um = y * 1e-6
-    print(f"     • monitor_{port_name}: x={x_um:.6f} m, y={y_um:.6f} m")
-
-print("\n3. CALCULER ET LANCER LA SIMULATION")
-print("   - Appuyez sur le bouton 'Run'")
-print("   - Attendez que la simulation se termine")
-print("\n4. EXTRAIRE LES RÉSULTATS")
-print("   - Une fois terminé, exécutez: python extract_varFDTD_results.py")
+try:
+    # Run the simulation
+    mode.run()
+    print("\n✓ Simulation terminée avec succès!")
+    
+    # Save after simulation
+    mode.save(fsp_path)
+    print(f"✓ Résultats sauvegardés: {fsp_path}")
+    
+    print("\n" + "="*70)
+    print("PROCHAINES ÉTAPES")
+    print("="*70)
+    print("\n1. ANALYSER LES RÉSULTATS")
+    print(f"   python scripts/extract_varFDTD_results.py")
+    print("\n2. VISUALISER DANS LUMERICAL")
+    print("   - Les moniteurs contiennent maintenant les données de transmission")
+    print("   - Vous pouvez visualiser les champs et les puissances")
+    
+except Exception as e:
+    print(f"\n✗ Erreur lors de la simulation: {e}")
+    print("\nLe fichier a été sauvegardé. Vous pouvez:")
+    print("1. Ouvrir le fichier dans Lumerical MODE")
+    print("2. Vérifier la configuration")
+    print("3. Lancer manuellement avec le bouton Run")
+    import traceback
+    traceback.print_exc()
 
 print("\n" + "="*70)
-print("Lumerical MODE reste ouvert - configurez manuellement et lancez Run")
+print("Lumerical MODE reste ouvert pour analyse")
 print("="*70)
