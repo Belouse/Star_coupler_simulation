@@ -150,8 +150,8 @@ def _transform_points_and_port(
 def star_coupler(
     n_inputs: int = 3,
     n_outputs: int = 4,
-    pitch_inputs: float = 10.0,
-    pitch_outputs: float = 10.0,
+    pitch_inputs: float = 5.26,
+    pitch_outputs: float = 3.55,
     angle_inputs: bool = True,
     angle_outputs: bool = True,
     taper_length: float = 40.0,
