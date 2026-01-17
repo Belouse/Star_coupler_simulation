@@ -208,26 +208,28 @@ set("mode selection", "fundamental TE mode");
         
         # Monitors are Linear Y for horizontal waveguides, Linear X for vertical
         if abs(orientation - 0) < 45 or abs(orientation - 180) < 45 or abs(orientation - 360) < 45:
-            # Horizontal waveguide - use Linear Y
-            monitor_type = "Linear Y"
-            y_span = port_width * 3
-            x_span = 1e-9  # Very small x span for Linear Y
-        else:
-            # Vertical waveguide - use Linear X
-            monitor_type = "Linear X"
-            x_span = port_width * 3
-            y_span = 1e-9  # Very small y span for Linear X
-        
-        monitor_script = f"""
-addpower;
+            # Horizontal waveguide - use Linear Y (monitor type 6)
+            monitor_script = f"""
+adddftmonitor;
 set("name", "monitor_{port_name}");
-set("monitor type", "{monitor_type}");
+set("monitor type", 6);
 set("x", {x_m});
 set("y", {y_m});
-set("y span", {y_span});
-set("x span", {x_span});
+set("y span", {port_width * 3});
 set("z", {wg_height/2});
 """
+        else:
+            # Vertical waveguide - use Linear X (monitor type 5)
+            monitor_script = f"""
+adddftmonitor;
+set("name", "monitor_{port_name}");
+set("monitor type", 5);
+set("x", {x_m});
+set("y", {y_m});
+set("x span", {port_width * 3});
+set("z", {wg_height/2});
+"""
+        
         try:
             mode.eval(monitor_script)
         except Exception as e:
