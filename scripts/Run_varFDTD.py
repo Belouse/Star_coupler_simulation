@@ -25,7 +25,11 @@ print("="*70)
 print("\n[ÉTAPE 1] Génération du composant...")
 ubcpdk.PDK.activate()
 c = star_coupler(n_inputs=3, n_outputs=4)
-gds_path = os.path.join(os.getcwd(), "star_coupler_for_mode.gds")
+
+# Create output/gds folder if it doesn't exist
+gds_folder = os.path.join(project_root, "output", "gds")
+os.makedirs(gds_folder, exist_ok=True)
+gds_path = os.path.join(gds_folder, "star_coupler_for_mode.gds")
 c.write_gds(gds_path)
 print(f"  ✓ GDS sauvegardé: {gds_path}")
 
@@ -108,7 +112,11 @@ except Exception as e:
 
 # --- 6. SAUVEGARDE ---
 print("\n[ÉTAPE 5] Sauvegarde de la configuration...")
-fsp_path = os.path.join(os.getcwd(), "star_coupler_varFDTD.fsp")
+
+# Create output/fsp folder if it doesn't exist
+fsp_folder = os.path.join(project_root, "output", "fsp")
+os.makedirs(fsp_folder, exist_ok=True)
+fsp_path = os.path.join(fsp_folder, "star_coupler_varFDTD.fsp")
 try:
     mode.save(fsp_path)
     print(f"  ✓ Fichier sauvegardé: {fsp_path}")
