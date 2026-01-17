@@ -109,15 +109,14 @@ set("index", 1.444);
 select("varFDTD");
 set("force symmetric x mesh", 0);
 set("force symmetric y mesh", 0);
+set("auto shutoff min", 1.00e-5);
+
+# Configure job launching for GPU/local execution
+set("job launching preset", "local");
+set("use GPU if available", 1);
 """
     mode.eval(solver_script)
-    
-    # Try to enable GPU
-    try:
-        mode.eval('select("varFDTD"); set("auto shutoff min", 1.00e-5);')
-        print("  ✓ Solveur varFDTD configuré (GPU)")
-    except:
-        print("  ✓ Solveur varFDTD configuré (CPU)")
+    print("  ✓ Solveur varFDTD configuré (GPU local)")
         
 except Exception as e:
     print(f"  ✗ Erreur solveur: {e}")

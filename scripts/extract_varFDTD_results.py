@@ -15,6 +15,11 @@ import sys
 import os
 import numpy as np
 
+# Add the project root to sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 # --- Configuration API Lumerical ---
 lumerical_api_path = r"C:\Program Files\Lumerical\v252\api\python" 
 if lumerical_api_path not in sys.path:
@@ -26,17 +31,14 @@ print("="*70)
 print("EXTRACTION DES RÉSULTATS VARFDTD")
 print("="*70)
 
-# Trouvez le fichier .fsp le plus récent
-fsp_dir = os.getcwd()
-fsp_files = [f for f in os.listdir(fsp_dir) if f.endswith('.fsp')]
+# Look for .fsp file in output/fsp folder
+fsp_folder = os.path.join(project_root, "output", "fsp")
+fsp_file = "star_coupler_varFDTD.fsp"
+fsp_path = os.path.join(fsp_folder, fsp_file)
 
-if not fsp_files:
-    print("✗ Aucun fichier .fsp trouvé dans le répertoire courant")
+if not os.path.exists(fsp_path):
+    print(f"✗ Fichier non trouvé: {fsp_path}")
     sys.exit(1)
-
-# Prendre le plus récent
-fsp_file = max(fsp_files, key=lambda f: os.path.getmtime(os.path.join(fsp_dir, f)))
-fsp_path = os.path.join(fsp_dir, fsp_file)
 
 print(f"\n[1] Ouverture du fichier: {fsp_file}")
 
