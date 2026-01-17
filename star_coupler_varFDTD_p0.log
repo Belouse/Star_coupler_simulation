@@ -89,3 +89,30 @@ Starting 89127 total iterations
 28% complete. Max time remaining: 4 hrs, 28 mins, 19 secs. Auto Shutoff: 0.46599
 29% complete. Max time remaining: 4 hrs, 24 mins, 44 secs. Auto Shutoff: 0.429097
 30% complete. Max time remaining: 4 hrs, 21 mins, 45 secs. Auto Shutoff: 0.211076
+31% complete. Max time remaining: 4 hrs, 19 mins, 36 secs. Auto Shutoff: 0.0863274
+32% complete. Max time remaining: 4 hrs, 17 mins, 51 secs. Auto Shutoff: 0.00767865
+33% complete. Max time remaining: 4 hrs, 15 mins, 56 secs. Auto Shutoff: 1.57491e-05
+34% complete. Max time remaining: 4 hrs, 13 mins, 13 secs. Auto Shutoff: 1.17272e-05
+35% complete. Max time remaining: 4 hrs, 10 mins, 22 secs. Auto Shutoff: 1.10757e-05
+36% complete. Max time remaining: 4 hrs, 7 mins, 36 secs. Auto Shutoff: 1.04736e-05
+Early termination of simulation, the autoshutoff criteria are satisfied.
+Completed 32893 iterations, or 0.000000s of Simulation Time
+Process 0 starting to collect data
+    collecting monitor data
+    collecting source data
+Finished collecting data
+9.00897e+07
+
+32893
+
+8608.86
+
+Simulation completed successfully at: ven. janv. 16 21:24:20 2026
+Peak memory used in the simulation: 8417393 kB
+Overall wall time measurements in seconds: 8921.34
+    time to mesh and initialize: 311.218
+    time to run FDTD simulation: 8608.86
+    time to finalize data and save to files: 0.300326
+    miscellaneous time: 0.961548
+    FDTD solver speed on process 0: 344.218 Mnodes/s
+    total FDTD solver speed on 1 processes: 344.218 Mnodes/s
