@@ -206,28 +206,15 @@ set("mode selection", "fundamental TE mode");
         port_width = port['width'] * 1e-6
         orientation = port['orientation']
         
-        # Monitors are Linear Y for horizontal waveguides, Linear X for vertical
-        if abs(orientation - 0) < 45 or abs(orientation - 180) < 45 or abs(orientation - 360) < 45:
-            # Horizontal waveguide - use Linear Y (monitor type 6)
-            monitor_script = f"""
+        # Use 2D z-normal monitor (type 7) for varFDTD - small rectangle at each port
+        monitor_script = f"""
 adddftmonitor;
 set("name", "monitor_{port_name}");
-set("monitor type", 6);
+set("monitor type", 7);
 set("x", {x_m});
+set("x span", {port_width * 4});
 set("y", {y_m});
-set("y span", {port_width * 3});
-set("z", {wg_height/2});
-"""
-        else:
-            # Vertical waveguide - use Linear X (monitor type 5)
-            monitor_script = f"""
-adddftmonitor;
-set("name", "monitor_{port_name}");
-set("monitor type", 5);
-set("x", {x_m});
-set("y", {y_m});
-set("x span", {port_width * 3});
-set("z", {wg_height/2});
+set("y span", {port_width * 4});
 """
         
         try:
