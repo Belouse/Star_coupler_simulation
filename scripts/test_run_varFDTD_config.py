@@ -38,27 +38,27 @@ for port_name in input_ports:
         injection_axis = "x-axis"
         direction = "Backward"
         y_span = port_width * 3
-        x_span = 0
+        x_span = 1e-9
     elif abs(orientation - 180) < 45:
         injection_axis = "x-axis"
         direction = "Forward"
         y_span = port_width * 3
-        x_span = 0
+        x_span = 1e-9
     elif abs(orientation - 90) < 45:
         injection_axis = "y-axis"
         direction = "Backward"
         x_span = port_width * 3
-        y_span = 0
+        y_span = 1e-9
     elif abs(orientation - 270) < 45:
         injection_axis = "y-axis"
         direction = "Forward"
         x_span = port_width * 3
-        y_span = 0
+        y_span = 1e-9
     else:
         injection_axis = "x-axis"
         direction = "Backward"
         y_span = port_width * 3
-        x_span = 0
+        x_span = 1e-9
     
     print(f"\n  Source: {port_name}")
     print(f"    Position: x={x_m*1e6:.3f} µm, y={y_m*1e6:.3f} µm")
@@ -84,11 +84,11 @@ for port_name in output_ports:
     if abs(orientation - 0) < 45 or abs(orientation - 180) < 45 or abs(orientation - 360) < 45:
         monitor_type = "Linear Y"
         y_span = port_width * 3
-        x_span = 0
+        x_span = 1e-9
     else:
         monitor_type = "Linear X"
         x_span = port_width * 3
-        y_span = 0
+        y_span = 1e-9
     
     print(f"\n  Monitor: monitor_{port_name}")
     print(f"    Position: x={x_m*1e6:.3f} µm, y={y_m*1e6:.3f} µm")

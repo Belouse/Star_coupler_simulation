@@ -103,7 +103,7 @@ set("y span", {sim_y_span});
 set("z", {wg_height/2});
 set("simulation time", 5000e-15);
 set("mesh accuracy", 2);
-set("background index", 1.444);
+set("index", 1.444);
 
 # Configure GPU acceleration
 select("varFDTD");
@@ -148,31 +148,31 @@ try:
             injection_axis = "x-axis"
             direction = "Backward"
             y_span = port_width * 3
-            x_span = 0
+            x_span = 1e-9  # Very small x span for x-axis source
         elif abs(orientation - 180) < 45:
             # Port facing West (180°) - inject from right (forward)
             injection_axis = "x-axis"
             direction = "Forward"
             y_span = port_width * 3
-            x_span = 0
+            x_span = 1e-9  # Very small x span for x-axis source
         elif abs(orientation - 90) < 45:
             # Port facing North (90°) - inject from bottom (backward)
             injection_axis = "y-axis"
             direction = "Backward"
             x_span = port_width * 3
-            y_span = 0
+            y_span = 1e-9  # Very small y span for y-axis source
         elif abs(orientation - 270) < 45:
             # Port facing South (270°) - inject from top (forward)
             injection_axis = "y-axis"
             direction = "Forward"
             x_span = port_width * 3
-            y_span = 0
+            y_span = 1e-9  # Very small y span for y-axis source
         else:
             # Default to x-axis backward
             injection_axis = "x-axis"
             direction = "Backward"
             y_span = port_width * 3
-            x_span = 0
+            x_span = 1e-9
         
         source_script = f"""
 addmodesource;
@@ -188,7 +188,10 @@ set("wavelength start", {wavelength_center - wavelength_span/2});
 set("wavelength stop", {wavelength_center + wavelength_span/2});
 set("mode selection", "fundamental TE mode");
 """
-        mode.eval(source_script)
+        try:
+            mode.eval(source_script)
+        except Exception as e:
+            print(f"  ⚠ Erreur source {port_name}: {e}")
     
     print(f"  ✓ {len(input_ports)} sources ajoutées: {input_ports}")
     
@@ -208,12 +211,12 @@ set("mode selection", "fundamental TE mode");
             # Horizontal waveguide - use Linear Y
             monitor_type = "Linear Y"
             y_span = port_width * 3
-            x_span = 0
+            x_span = 1e-9  # Very small x span for Linear Y
         else:
             # Vertical waveguide - use Linear X
             monitor_type = "Linear X"
             x_span = port_width * 3
-            y_span = 0
+            y_span = 1e-9  # Very small y span for Linear X
         
         monitor_script = f"""
 addpower;
@@ -225,7 +228,10 @@ set("y span", {y_span});
 set("x span", {x_span});
 set("z", {wg_height/2});
 """
-        mode.eval(monitor_script)
+        try:
+            mode.eval(monitor_script)
+        except Exception as e:
+            print(f"  ⚠ Erreur moniteur {port_name}: {e}")
     
     print(f"  ✓ {len(output_ports)} moniteurs ajoutés: {output_ports}")
     
