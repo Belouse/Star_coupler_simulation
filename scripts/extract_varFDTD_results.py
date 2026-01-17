@@ -31,21 +31,29 @@ print("="*70)
 print("EXTRACTION DES RÉSULTATS VARFDTD")
 print("="*70)
 
-# Look for .fsp file in output/fsp folder
-fsp_folder = os.path.join(project_root, "output", "fsp")
-fsp_file = "star_coupler_varFDTD.fsp"
-fsp_path = os.path.join(fsp_folder, fsp_file)
+# Look for .lms file in output/logs folder (created by varFDTD simulation)
+logs_folder = os.path.join(project_root, "output", "logs")
+lms_file = "star_coupler_varFDTD.lms"
+lms_path = os.path.join(logs_folder, lms_file)
 
-if not os.path.exists(fsp_path):
-    print(f"✗ Fichier non trouvé: {fsp_path}")
+# If not in logs, check fsp folder
+if not os.path.exists(lms_path):
+    fsp_folder = os.path.join(project_root, "output", "fsp")
+    lms_path = os.path.join(fsp_folder, lms_file)
+    
+if not os.path.exists(lms_path):
+    print(f"✗ Fichier .lms non trouvé. Cherché dans:")
+    print(f"  - {os.path.join(logs_folder, lms_file)}")
+    print(f"  - {os.path.join(fsp_folder, lms_file)}")
     sys.exit(1)
 
-print(f"\n[1] Ouverture du fichier: {fsp_file}")
+print(f"\n[1] Ouverture du fichier: {lms_file}")
+print(f"    Chemin: {lms_path}")
 
 # Ouvrir Lumerical et charger le fichier
 try:
     mode = lumapi.MODE(hide=False)
-    mode.load(fsp_path)
+    mode.load(lms_path)
     print(f"  ✓ Fichier chargé")
 except Exception as e:
     print(f"  ✗ Erreur: {e}")

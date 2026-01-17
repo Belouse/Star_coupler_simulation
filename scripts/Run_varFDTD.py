@@ -104,19 +104,10 @@ set("z", {wg_height/2});
 set("simulation time", 5000e-15);
 set("mesh accuracy", 2);
 set("index", 1.444);
-
-# Configure GPU acceleration
-select("varFDTD");
-set("force symmetric x mesh", 0);
-set("force symmetric y mesh", 0);
 set("auto shutoff min", 1.00e-5);
-
-# Configure job launching for GPU/local execution
-set("job launching preset", "local");
-set("use GPU if available", 1);
 """
     mode.eval(solver_script)
-    print("  ✓ Solveur varFDTD configuré (GPU local)")
+    print("  ✓ Solveur varFDTD configuré")
         
 except Exception as e:
     print(f"  ✗ Erreur solveur: {e}")
