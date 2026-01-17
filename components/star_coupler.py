@@ -162,7 +162,7 @@ def star_coupler(
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (1, 0),
     npoints: int = 361,
-    taper_overlap: float = 0.1,
+    taper_overlap: float = 0.5,
     clad_layer: Optional[Tuple[int, int]] = (111, 0),
     clad_offset: float = 3.0,
 ) -> gf.Component:
