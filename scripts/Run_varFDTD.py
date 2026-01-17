@@ -3,6 +3,11 @@ import os
 import gdsfactory as gf
 import numpy as np
 
+# Add the project root to sys.path to enable imports from components/
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 # --- 1. CONFIGURATION DE L'API LUMERICAL ---
 lumerical_api_path = r"C:\Program Files\Lumerical\v252\api\python" 
 if lumerical_api_path not in sys.path:

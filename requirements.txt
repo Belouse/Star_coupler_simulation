@@ -1,4 +1,4 @@
 numpy
-gdsfactory
-gplugins
-ubcpdk
+gdsfactory>=8.0.0
+gplugins>=2.0.0
+ubcpdk>=3.0.0u
