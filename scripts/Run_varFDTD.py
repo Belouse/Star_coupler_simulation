@@ -185,10 +185,9 @@ set("y", {y_m});
             source_script += f"set(\"x span\", {x_span});\n"
 
         source_script += f"""
-set("z", {wg_height/2});
 set("wavelength start", {wavelength_center - wavelength_span/2});
 set("wavelength stop", {wavelength_center + wavelength_span/2});
-set("mode selection", "fundamental TE mode");
+set("mode selection", "fundamental mode");
 """
         try:
             mode.eval(source_script)
@@ -198,36 +197,32 @@ set("mode selection", "fundamental TE mode");
     print(f"  ✓ {len(input_ports)} sources ajoutées: {input_ports}")
     
     # Add power monitors at output ports (e1, e2, e3, e4)
+    # All output ports face East (0°) so use 2D X-normal monitors (type 5)
+    # These are YZ planes perpendicular to the X propagation direction
     output_ports = sorted([p for p in ports_info.keys() if p.startswith('e')])
+    
+    # Monitor dimensions (matching manual configuration)
+    monitor_y_span = 0.6e-6  # 0.6 µm in y (covers waveguide width)
+    monitor_z_span = 0.5e-6  # 0.5 µm in z (covers waveguide height)
+    monitor_z_center = wg_height / 2  # Center at waveguide midpoint (0.11 µm)
     
     for port_name in output_ports:
         port = ports_info[port_name]
         x, y = port['center']
         x_m = x * 1e-6  # Convert from µm to m
         y_m = y * 1e-6
-        port_width = port['width'] * 1e-6
-        orientation = port['orientation']
         
-        # Determine monitor orientation based on waveguide direction
-        # For horizontal waveguides (0° or 180°), use Linear Y (perpendicular to waveguide)
-        # For vertical waveguides (90° or 270°), use Linear X (perpendicular to waveguide)
-        if abs(orientation - 0) < 45 or abs(orientation - 180) < 45 or abs(orientation - 360) < 45:
-            # Horizontal waveguide - use Linear Y (type 6) - vertical line crossing waveguide
-            monitor_script = f"""
-adddftmonitor;
-set("name", "monitor_{port_name}");
-set("monitor type", 6);
-set("x", {x_m});
-set("y", {y_m});
-"""
-        else:
-            # Vertical waveguide - use Linear X (type 5) - horizontal line crossing waveguide
-            monitor_script = f"""
+        # Create 2D X-normal monitor (type 5)
+        # This creates a rectangular YZ plane at position x
+        monitor_script = f"""
 adddftmonitor;
 set("name", "monitor_{port_name}");
 set("monitor type", 5);
 set("x", {x_m});
 set("y", {y_m});
+set("y span", {monitor_y_span});
+set("z", {monitor_z_center});
+set("z span", {monitor_z_span});
 """
         
         try:

@@ -4,53 +4,53 @@ Ansys Lumerical 2025 R2.2 Variational FDTD Solver Version 7.26.4251 (Windows 64b
  expires (month/day/year): Permanent
 using config file: Ansys Licensing set with ANSYSLMD_LICENSE_FILE
 license host: 
-current time: sam. janv. 17 15:28:28 2026
+current time: sam. janv. 17 16:11:20 2026
 Running on host: PC-THUR
 All processes are communicating and ready to proceed to simulation...
 Detected 12 processes on 12 hosts
-Running lms file: C:\Program Files\Lumerical\v252\bin\varfdtd-engine-msmpi.exe -t 1 -remote -shared-solve-license QU5TWVNfTElDRU5TSU5HX0NPTlRFWFRfREFUQT08QU5TWVNfTElDRU5TSU5HX0NPTlRFWFRfREFUQT48REFUQT5QRTlMUlZsZlUwbGFSVDRLTVRJNENqd3ZUMHRGV1Y5VFNWcEZQZ284UlU1RFgxTkpXa1UtQ2pFek5nbzhMMFZPUTE5VFNWcEZQZ284U1ZaZlUwbGFSVDRLT0FvOEwwbFdYMU5KV2tVLUNqeE5VMGRmVTBsYVJUNEtNVE00Q2p3dlRWTkhYMU5KV2tVLUNqeE5VMGMtQ25Sc1JsbENlRTFSVG1rMmVGaFVhRFJaVldacVIwdFNPRjlrVjNGeFZ6RlFhM28zWjBwZmMwbHBlRjlSTFZwQ1NYVXRkRWxoVjNwbmQxZGhlRnBOVkU5aWVtdERkVGRoZUdKMFdFTTNNWEpvVTBoc2EzTldZaTF6WkhRelVHbDRVa2t4TkhBdGNqVkZla3Q2Y21aVFVHbzFhSFJ6VVd4S1IyTmZibHBQZG05RlZtdHZZVFl3Y2xwWmNFZG1ZbEp0TTI5dVNHcG1ZVE5QVVZrd1ZFd3dXVk53Ulc1Vk9WaEtTbHAzZFV3MFFqZHNhMjFmUlROWlZEaHRhRmxoWkdwcU1uWTBlVXB2YUV0UVQwMDFVWFZyWlc1QlowRmpRbTl1TWtWYWJXTm9UalJPV1hKWU5sZHVaakpaWmpOMlVEbEZTVkpOZEVoelZTMW5kMlZ0ZVRSMVJsRjVVRGR2YTBscWJXSlZURGROUW5kNlNrdDNhMDFGTkRoTGVVOVJWR2xaV21waGRETXRhbmw2UzFkMVNuVXRhV1EyYUZOTFMyVm1iREZpYzBaaVFsTlhhMlZCU0RsWVZrVjVjSGs1UzIwdE1EQllXa2RPYlhOd2JVTXllbGRUU1RBeGJHbHFSSGhJVUZNelFRbzhMMDFUUno0SzwvREFUQT48L0FOU1lTX0xJQ0VOU0lOR19DT05URVhUX0RBVEE+CkFOU1lTX0xJQ0VOU0lOR19XT1JLRkxPV19TRVNTSU9OPTxEQVRBPjxJRD5QQy1USFVSX8lsb2lfQmxvdWluXzI1MjwvSUQ+PC9EQVRBPgo= C:/lumerical_simulation/Star_coupler_simulation/output/fsp/star_coupler_varFDTD.lms
+Running lms file: C:\Program Files\Lumerical\v252\bin\varfdtd-engine-msmpi.exe -t 1 -remote -shared-solve-license QU5TWVNfTElDRU5TSU5HX0NPTlRFWFRfREFUQT08QU5TWVNfTElDRU5TSU5HX0NPTlRFWFRfREFUQT48REFUQT5QRTlMUlZsZlUwbGFSVDRLTVRJNENqd3ZUMHRGV1Y5VFNWcEZQZ284UlU1RFgxTkpXa1UtQ2pFek5nbzhMMFZPUTE5VFNWcEZQZ284U1ZaZlUwbGFSVDRLT0FvOEwwbFdYMU5KV2tVLUNqeE5VMGRmVTBsYVJUNEtNVE00Q2p3dlRWTkhYMU5KV2tVLUNqeE5VMGMtQ2xaQmRWVkxNRXRGVTE4MmNFczFlbWt0Um5CdmRFZFBSME01YTFnMVdWaGlkVGRwVVc5SE4zWnVka0ZGV0RsNFJ6UldURWhsV0RCaGNFdGFWMFk1YVRCU1ZVZGljR1l5UWpCT2NucHJNbGhDV0hoNFpWUmZNbXh6UldsbVlrWlpZa0pzUjJaZmJ6VkpWa3N6UTFGcE9WRlVaRGt0VURrNFoxVTBaaTF0TldsNVpuSktZMWxwVDFWYVdFNVJXRzAzTld0NVJYa3dhVmwxUjBwaGEzQkxiMkZmZUROZlFVSllWMDVJWDFsWlNFaEpRak5vVFd4VlJsSlJWbEpoUlhWbVFWaDJMWGhYV1dnNFp6VkpTWEJET0dKbVEzbHFZMEZaUVdkbVIxSkZVbnBTUTJaWFNFNVVPRGhRWVZoaFlXcFVVVkpYWTFGMlFsUmxPVmR3WkV0bFpEVnFjR3MxTkdVMVIzVTBUeTFuYjBJdGVsZHdaMjh6UnpSVVNXbGFNWGRpYW1ORVYxTmxPUzB3V1doNFdsVnVaRVZETms1M1p6VnBNMmhrUnpWQlpuZ3pPRTl5Vms5cGFsWjRSSEJrWkhGd1ZrVnBRa3AyWTBGcGMxZGZaek14TVUxaFIxRmFTV2hRTUhWR1p3bzhMMDFUUno0SzwvREFUQT48L0FOU1lTX0xJQ0VOU0lOR19DT05URVhUX0RBVEE+CkFOU1lTX0xJQ0VOU0lOR19XT1JLRkxPV19TRVNTSU9OPTxEQVRBPjxJRD5QQy1USFVSX8lsb2lfQmxvdWluXzI1MjwvSUQ+PC9EQVRBPgo= C:/lumerical_simulation/Star_coupler_simulation/output/fsp/star_coupler_varFDTD.lms
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.015625 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
 Starting meshing
-Simulation size in gridpoints: 1 x 211 x 1
+Simulation size in gridpoints: 1 x 37 x 1
 Refined 0 mesh cells (0.000000%)
 Completed meshing!
 Meshing complete in 0.000000 seconds of CPU time
