@@ -148,31 +148,26 @@ try:
             injection_axis = "x-axis"
             direction = "Backward"
             y_span = port_width * 3
-            x_span = 1e-9  # Very small x span for x-axis source
         elif abs(orientation - 180) < 45:
             # Port facing West (180°) - inject from right (forward)
             injection_axis = "x-axis"
             direction = "Forward"
             y_span = port_width * 3
-            x_span = 1e-9  # Very small x span for x-axis source
         elif abs(orientation - 90) < 45:
             # Port facing North (90°) - inject from bottom (backward)
             injection_axis = "y-axis"
             direction = "Backward"
             x_span = port_width * 3
-            y_span = 1e-9  # Very small y span for y-axis source
         elif abs(orientation - 270) < 45:
             # Port facing South (270°) - inject from top (forward)
             injection_axis = "y-axis"
             direction = "Forward"
             x_span = port_width * 3
-            y_span = 1e-9  # Very small y span for y-axis source
         else:
             # Default to x-axis backward
             injection_axis = "x-axis"
             direction = "Backward"
             y_span = port_width * 3
-            x_span = 1e-9
         
         source_script = f"""
 addmodesource;
@@ -181,8 +176,15 @@ set("injection axis", "{injection_axis}");
 set("direction", "{direction}");
 set("x", {x_m});
 set("y", {y_m});
-set("y span", {y_span});
-set("x span", {x_span});
+"""
+
+        # Set only the transverse span (do not set the inactive axis)
+        if injection_axis == "x-axis":
+            source_script += f"set(\"y span\", {y_span});\n"
+        else:
+            source_script += f"set(\"x span\", {x_span});\n"
+
+        source_script += f"""
 set("z", {wg_height/2});
 set("wavelength start", {wavelength_center - wavelength_span/2});
 set("wavelength stop", {wavelength_center + wavelength_span/2});
@@ -206,15 +208,26 @@ set("mode selection", "fundamental TE mode");
         port_width = port['width'] * 1e-6
         orientation = port['orientation']
         
-        # Use 2D z-normal monitor (type 7) for varFDTD - small rectangle at each port
-        monitor_script = f"""
+        # Determine monitor orientation based on waveguide direction
+        # For horizontal waveguides (0° or 180°), use Linear Y (perpendicular to waveguide)
+        # For vertical waveguides (90° or 270°), use Linear X (perpendicular to waveguide)
+        if abs(orientation - 0) < 45 or abs(orientation - 180) < 45 or abs(orientation - 360) < 45:
+            # Horizontal waveguide - use Linear Y (type 6) - vertical line crossing waveguide
+            monitor_script = f"""
 adddftmonitor;
 set("name", "monitor_{port_name}");
-set("monitor type", 7);
+set("monitor type", 6);
 set("x", {x_m});
-set("x span", {port_width * 4});
 set("y", {y_m});
-set("y span", {port_width * 4});
+"""
+        else:
+            # Vertical waveguide - use Linear X (type 5) - horizontal line crossing waveguide
+            monitor_script = f"""
+adddftmonitor;
+set("name", "monitor_{port_name}");
+set("monitor type", 5);
+set("x", {x_m});
+set("y", {y_m});
 """
         
         try:
