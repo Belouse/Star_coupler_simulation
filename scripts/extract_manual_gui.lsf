@@ -1,42 +1,90 @@
-# Lumerical script to extract varFDTD results
-# Run this directly in the Lumerical MODE Script Workspace after loading the .lms file
+######################################################################
+# SCRIPT D'EXTRACTION: S-MATRIX (SAFE MODE COMPATIBLE)
+######################################################################
+clear;
 
-# Monitor names
-monitors = ["monitor_e1", "monitor_e2", "monitor_e3", "monitor_e4"];
+# 1. Define your output monitors
+monitors = {"monitor_e1", "monitor_e2", "monitor_e3", "monitor_e4"};
 
-?"======================================================================";
-?"EXTRACTION RÉSULTATS VARFDTD";
-?"======================================================================";
-?newline;
+# 2. Check if results exist
+if (layoutmode) {
+    message("ERREUR: La simulation n'a pas de résultats. Veuillez lancer 'Run' d'abord.");
+    break;
+}
 
-# Extract transmission data for each monitor
-for (i = 1:length(monitors)) {
-    monitor_name = monitors(i);
+# 3. Create header for output file
+filename = "star_coupler_S_matrix.txt";
+
+# SAFE MODE FIX: We cannot use 'rm'. 
+# If the file exists, we print a warning that we are appending.
+if (fileexists(filename)) {
+    ?"ATTENTION: Le fichier " + filename + " existe deja. Les nouvelles donnees seront ajoutees a la fin.";
+    ?"Pour ecraser le fichier, veuillez le supprimer manuellement dans Windows.";
+} else {
+    write(filename, "Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)");
+}
+
+# 4. Loop through monitors
+for (i=1:length(monitors)) {
+    name = monitors{i}; # Use curly braces for cell array indexing
     
-    # Try to get T (transmission) result
-    if (haveresult(monitor_name, "T")) {
-        T_data = getresult(monitor_name, "T");
-        T_values = T_data.T;
-        lambda_values = T_data.lambda;
+    if (havedata(name)) {
+        ########################################
+        # A. Get Transmission (Power)
+        ########################################
+        T = transmission(name);
         
-        T_mean = mean(T_values);
+        # Get frequency/wavelength vector
+        f = getdata(name, "f");
+        wvl_m = c/f;
+        wvl_um = wvl_m * 1e6;
+
+        ########################################
+        # B. Get Phase (from E-field)
+        ########################################
+        E_data = getresult(name, "E");
         
-        ?monitor_name + ": T = " + num2str(T_mean);
-        ?("  Longueurs d'onde: " + num2str(length(lambda_values)) + " points");
-        ?("  T min/max: " + num2str(min(T_values)) + " / " + num2str(max(T_values)));
-        ?newline;
+        # Get dimensions
+        dims = size(E_data.E);
+        # dims is usually [x, y, z, f] or [x, y, 1, f] for 2D monitors
         
-        # Save to file
-        filename = "results_" + monitor_name + ".txt";
-        write(filename, "Wavelength(m),Transmission");
-        for (j = 1:length(lambda_values)) {
-            write(filename, num2str(lambda_values(j)) + "," + num2str(T_values(j)));
+        # Find the center point index to extract phase
+        # We assume the mode is centered in the monitor window
+        mid_x = 1; 
+        mid_y = round(dims(2)/2);
+        mid_z = 1;
+        if (length(dims) > 3) { mid_z = round(dims(3)/2); }
+        
+        # Extract Component (Dominant field)
+        # We try Ey first (common for TE), then Ez, then Ex
+        Ey_center = pinch(E_data.Ey, 1, mid_x); 
+        Ey_center = pinch(Ey_center, 1, mid_y); 
+        if (length(dims) > 3) { Ey_center = pinch(Ey_center, 1, mid_z); }
+        
+        # Calculate Phase from the dominant component at center
+        # (Using Ey is standard for TE modes in planar waveguides)
+        phi_rad = angle(Ey_center);
+        phi_deg = phi_rad * 180 / pi;
+        
+        # Unwrap phase to remove 2pi jumps
+        phi_rad = unwrap(phi_rad);
+        
+        ########################################
+        # C. Write to file
+        ########################################
+        ?"  > Extraction " + name + ": " + num2str(length(wvl_um)) + " points.";
+        
+        for(j=1:length(wvl_um)) {
+            # Construct the string explicitly ensuring all parts are strings
+            line_str = name + ", " + num2str(wvl_um(j)) + ", " + num2str(T(j)) + ", " + num2str(phi_rad(j)) + ", " + num2str(phi_deg(j));
+            write(filename, line_str);
         }
+        
     } else {
-        ?monitor_name + ": pas de résultat T disponible";
+        ?"ATTENTION: Pas de donnees pour " + name;
     }
 }
 
-?"======================================================================";
-?"Extraction terminée. Fichiers .txt créés dans le répertoire courant.";
-?"======================================================================";
+?"======================================================";
+?"SUCCES: Resultats sauvegardes dans " + filename;
+?"======================================================";
