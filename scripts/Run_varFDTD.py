@@ -102,7 +102,7 @@ set("x span", {sim_x_span});
 set("y span", {sim_y_span});
 set("z", {wg_height/2});
 set("simulation time", 5000e-15);
-set("mesh accuracy", 2);
+set("mesh accuracy", 1);
 set("index", 1.444);
 set("auto shutoff min", 1.00e-5);
 """
@@ -120,8 +120,11 @@ wavelength_center = 1.55e-6  # 1550 nm
 wavelength_span = 0.1e-6     # 100 nm range
 
 try:
-    # Add sources at input ports (o1, o2, o3)
+    # Add source only at o2 input port for current simulation
+    # (will test o1 and o3 in separate simulations)
     input_ports = sorted([p for p in ports_info.keys() if p.startswith('o')])
+    # Filter to only o2
+    input_ports = [p for p in input_ports if p == 'o2']
     
     for port_name in input_ports:
         port = ports_info[port_name]
