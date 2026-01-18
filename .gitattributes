@@ -1,0 +1,2 @@
+*.lms filter=lfs diff=lfs merge=lfs -text
+*.fsp filter=lfs diff=lfs merge=lfs -text

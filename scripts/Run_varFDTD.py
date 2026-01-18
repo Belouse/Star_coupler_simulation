@@ -196,6 +196,27 @@ set("mode selection", "fundamental mode");
     monitor_z_span = 0.5e-6  # 0.5 µm in z (covers waveguide height)
     monitor_z_center = wg_height / 2  # Center at waveguide midpoint (0.11 µm)
     
+    # Add global 2D Z-normal monitor covering the entire simulation domain
+    print(f"\n  • Ajout du moniteur global de profil...")
+    try:
+        global_monitor_script = f"""
+addpower;
+set("name", "global_profile");
+set("monitor type", "2D Z-normal");
+set("x", 0); 
+set("y", 0);
+set("x span", {sim_x_span});
+set("y span", {sim_y_span});
+set("z", {monitor_z_center});
+set("down sample X", 4);
+set("down sample Y", 4);
+"""
+        mode.eval(global_monitor_script)
+        print(f"  ✓ Moniteur global ajouté: global_profile")
+    except Exception as e:
+        print(f"  ⚠ Erreur moniteur global: {e}")
+    
+    # Add port-specific monitors
     for port_name in output_ports:
         port = ports_info[port_name]
         x, y = port['center']
@@ -220,7 +241,7 @@ set("z span", {monitor_z_span});
         except Exception as e:
             print(f"  ⚠ Erreur moniteur {port_name}: {e}")
     
-    print(f"  ✓ {len(output_ports)} moniteurs ajoutés: {output_ports}")
+    print(f"  ✓ {len(output_ports)} moniteurs de port ajoutés: {output_ports}")
     
 except Exception as e:
     print(f"  ✗ Erreur configuration sources/moniteurs: {e}")
