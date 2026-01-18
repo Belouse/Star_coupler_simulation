@@ -1,0 +1,42 @@
+# Lumerical script to extract varFDTD results
+# Run this directly in the Lumerical MODE Script Workspace after loading the .lms file
+
+# Monitor names
+monitors = ["monitor_e1", "monitor_e2", "monitor_e3", "monitor_e4"];
+
+?"======================================================================";
+?"EXTRACTION RÉSULTATS VARFDTD";
+?"======================================================================";
+?newline;
+
+# Extract transmission data for each monitor
+for (i = 1:length(monitors)) {
+    monitor_name = monitors(i);
+    
+    # Try to get T (transmission) result
+    if (haveresult(monitor_name, "T")) {
+        T_data = getresult(monitor_name, "T");
+        T_values = T_data.T;
+        lambda_values = T_data.lambda;
+        
+        T_mean = mean(T_values);
+        
+        ?monitor_name + ": T = " + num2str(T_mean);
+        ?("  Longueurs d'onde: " + num2str(length(lambda_values)) + " points");
+        ?("  T min/max: " + num2str(min(T_values)) + " / " + num2str(max(T_values)));
+        ?newline;
+        
+        # Save to file
+        filename = "results_" + monitor_name + ".txt";
+        write(filename, "Wavelength(m),Transmission");
+        for (j = 1:length(lambda_values)) {
+            write(filename, num2str(lambda_values(j)) + "," + num2str(T_values(j)));
+        }
+    } else {
+        ?monitor_name + ": pas de résultat T disponible";
+    }
+}
+
+?"======================================================================";
+?"Extraction terminée. Fichiers .txt créés dans le répertoire courant.";
+?"======================================================================";

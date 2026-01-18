@@ -67,16 +67,12 @@ monitor_data = {}
 
 # Essayer de récupérer la liste des moniteurs
 try:
-    monitors_script = """
-monitors = find("monitor");
-monitor_list = "";
-for (i = 1 : length(monitors)) {
-    monitor_list = monitor_list + monitors(i) + ",";
-}
-monitor_list;
-"""
-    monitors_str = mode.eval(monitors_script)
-    monitors = [m.strip() for m in monitors_str.split(",") if m.strip()]
+    # Get list of all objects
+    monitors = []
+    mode.eval('temp = find("DFT");')
+    dft_str = mode.eval('temp;')
+    if dft_str:
+        monitors = [m.strip() for m in dft_str.split('\n') if 'monitor' in m.lower()]
     print(f"  ✓ Moniteurs trouvés: {monitors}")
 except Exception as e:
     print(f"  ⚠ Impossible de récupérer la liste automatiquement: {e}")
@@ -84,33 +80,59 @@ except Exception as e:
     monitors = ["monitor_e1", "monitor_e2", "monitor_e3", "monitor_e4"]
     print(f"  ℹ Utilisation des moniteurs par défaut: {monitors}")
 
-# Extraire les données pour chaque moniteur
-print(f"\n[3] Récupération des données...")
+# First, check what results are available for each monitor
+print(f"\n[3] Vérification des résultats disponibles...")
 for monitor_name in monitors:
     try:
-        # Extraire la puissance intégrée
-        power_script = f"""
-data = getresult("{monitor_name}", "P");
-if (isempty(data)) {{
-    0;
-}} else {{
-    sum(data);
-}};
-"""
-        power = mode.eval(power_script)
-        monitor_data[monitor_name] = float(power) if power is not None else 0
-        print(f"  ✓ {monitor_name}: {power}")
+        # Query available results
+        result_names = mode.eval(f'?getresult("{monitor_name}");')
+        print(f"  {monitor_name}: {result_names if result_names else 'aucun résultat'}")
+    except:
+        print(f"  {monitor_name}: impossible de lister les résultats")
+
+# Extract data for each monitor
+print(f"\n[4] Récupération des données...")
+for monitor_name in monitors:
+    try:
+        # Method 1: Direct getresult with proper error handling
+        mode.eval(f'monitor_result = getresult("{monitor_name}", "T");')
         
-        # Essayer d'extraire aussi les données complètes
-        try:
-            data_script = f'getdata("{monitor_name}");'
-            full_data = mode.eval(data_script)
-            results[f"{monitor_name}_full"] = full_data
-        except:
-            pass
+        # Check if result exists
+        has_result = mode.eval('exists("monitor_result");')
+        if has_result:
+            T_values = mode.eval('monitor_result.T;')
+            wavelengths = mode.eval('monitor_result.lambda;')
             
+            if T_values is not None and hasattr(T_values, '__len__') and len(T_values) > 0:
+                T_mean = float(np.mean(T_values))
+                monitor_data[monitor_name] = T_mean
+                print(f"  ✓ {monitor_name}: T = {T_mean:.6f} (moyenne sur {len(T_values)} λ)")
+                
+                # Store arrays
+                results[f"{monitor_name}_T"] = np.array(T_values).flatten()
+                results[f"{monitor_name}_lambda"] = np.array(wavelengths).flatten()
+                continue
+        
+        # Method 2: Try accessing power data directly
+        mode.eval(f'select("{monitor_name}");')
+        mode.eval('monitor_power = getdata("power");')
+        has_power = mode.eval('exists("monitor_power");')
+        
+        if has_power:
+            power = mode.eval('monitor_power;')
+            if power is not None and hasattr(power, '__len__'):
+                power_mean = float(np.mean(power))
+                monitor_data[monitor_name] = power_mean
+                print(f"  ✓ {monitor_name}: puissance = {power_mean:.6e}")
+                results[f"{monitor_name}_power"] = np.array(power).flatten()
+                continue
+                
+        print(f"  ⚠ {monitor_name}: aucune donnée T ou power trouvée")
+        
     except Exception as e:
         print(f"  ⚠ {monitor_name}: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Calculer les transmissions
 print(f"\n[4] Calcul des transmissions...")
