@@ -24,16 +24,40 @@ print("="*70)
 
 print("\n[ÉTAPE 1] Génération du composant...")
 ubcpdk.PDK.activate()
-c = star_coupler(n_inputs=3, n_outputs=4)
+
+# Create the star coupler
+c_star = star_coupler(n_inputs=3, n_outputs=4)
+
+# Create a new top-level component with straight waveguides
+c = gf.Component("simulation_assembly")
+ref_star = c << c_star
+
+# Add straight waveguides (10µm) to the INPUT ports (o1, o2, o3)
+# These waveguides are connected to the taper's small side
+waveguide_length = 10.0  # 10 µm
+for port_name in ['o1', 'o2', 'o3']:
+    # Get the port from the star coupler reference
+    p = ref_star.ports[port_name]
+    
+    # Add a straight waveguide extending from this port
+    extension = c << gf.components.straight(length=waveguide_length, width=p.width)
+    extension.connect("o2", p)  # Connect output of straight to input port of star coupler
+    
+    # Add the waveguide's input port to the top-level component
+    c.add_port(name=port_name, port=extension.ports["o1"])
+
+# Copy output ports from star coupler to top-level component
+for port_name in ['e1', 'e2', 'e3', 'e4']:
+    c.add_port(name=port_name, port=ref_star.ports[port_name])
 
 # Create output/gds folder if it doesn't exist
 gds_folder = os.path.join(project_root, "output", "gds")
 os.makedirs(gds_folder, exist_ok=True)
 gds_path = os.path.join(gds_folder, "star_coupler_for_mode.gds")
 c.write_gds(gds_path)
-print(f"  ✓ GDS sauvegardé: {gds_path}")
+print(f"  ✓ GDS sauvegardé avec waveguides de {waveguide_length} µm: {gds_path}")
 
-# Récupération des positions des ports
+# Récupération des positions des ports (now from the assembly component)
 ports_info = {}
 for port in c.ports:
     ports_info[port.name] = {
