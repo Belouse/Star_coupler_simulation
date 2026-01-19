@@ -12,18 +12,31 @@ if (layoutmode) {
     break;
 }
 
-# 3. Detect source name from the simulation objects
+# 3. Detect source name from the current filename
 source_name = "unknown";
-# Try each possible source name directly
-possible_sources = {"source_o1", "source_o2", "source_o3"};
-for (i=1:length(possible_sources)) {
-    test_name = possible_sources{i};
-    try {
-        select(test_name);
-        # Extract source name (e.g., "source_o1" -> "o1")
-        source_name = replace(test_name, "source_", "");
-        break;
+
+# Get the current simulation filename
+current_file = currentfilename;
+?"Current file: " + current_file;
+
+# Extract source name from filename pattern: star_coupler_varFDTD_oX.lms
+# Find the position of "_o" in the filename
+pos_marker = findstring(current_file, "_o");
+if (pos_marker > 0) {
+    # Simple approach: look for the pattern _o1, _o2, _o3
+    if (findstring(current_file, "_o1") > 0) {
+        source_name = "o1";
+    } else if (findstring(current_file, "_o2") > 0) {
+        source_name = "o2";
+    } else if (findstring(current_file, "_o3") > 0) {
+        source_name = "o3";
+    } else if (findstring(current_file, "_o4") > 0) {
+        source_name = "o4";
+    } else if (findstring(current_file, "_o5") > 0) {
+        source_name = "o5";
     }
+    
+    ?"Detected source name: " + source_name;
 }
 
 # 4. Create output filename with source name in output/simulations folder
