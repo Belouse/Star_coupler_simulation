@@ -12,20 +12,22 @@ if (layoutmode) {
     break;
 }
 
-# 3. Detect source name from the filename or objects
+# 3. Detect source name from the simulation objects
 source_name = "unknown";
-# Try to find the source object
-sources = find("source");
-if (length(sources) > 0) {
-    # Extract source name (e.g., "source_o1" -> "o1")
-    full_name = sources{1};
-    if (findstring(full_name, "source_") > 0) {
-        source_name = replace(full_name, "source_", "");
+# Try each possible source name directly
+possible_sources = {"source_o1", "source_o2", "source_o3"};
+for (i=1:length(possible_sources)) {
+    test_name = possible_sources{i};
+    try {
+        select(test_name);
+        # Extract source name (e.g., "source_o1" -> "o1")
+        source_name = replace(test_name, "source_", "");
+        break;
     }
 }
 
-# 4. Create output filename with source name
-filename = "star_coupler_S_matrix_" + source_name + ".txt";
+# 4. Create output filename with source name in output/simulations folder
+filename = "../../output/simulations/star_coupler_S_matrix_" + source_name + ".txt";
 
 # SAFE MODE FIX: We cannot use 'rm'. 
 # If the file exists, we overwrite by starting fresh
