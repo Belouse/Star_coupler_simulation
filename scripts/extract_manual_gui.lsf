@@ -12,19 +12,32 @@ if (layoutmode) {
     break;
 }
 
-# 3. Create header for output file
-filename = "star_coupler_S_matrix.txt";
-
-# SAFE MODE FIX: We cannot use 'rm'. 
-# If the file exists, we print a warning that we are appending.
-if (fileexists(filename)) {
-    ?"ATTENTION: Le fichier " + filename + " existe deja. Les nouvelles donnees seront ajoutees a la fin.";
-    ?"Pour ecraser le fichier, veuillez le supprimer manuellement dans Windows.";
-} else {
-    write(filename, "Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)");
+# 3. Detect source name from the filename or objects
+source_name = "unknown";
+# Try to find the source object
+sources = find("source");
+if (length(sources) > 0) {
+    # Extract source name (e.g., "source_o1" -> "o1")
+    full_name = sources{1};
+    if (findstring(full_name, "source_") > 0) {
+        source_name = replace(full_name, "source_", "");
+    }
 }
 
-# 4. Loop through monitors
+# 4. Create output filename with source name
+filename = "star_coupler_S_matrix_" + source_name + ".txt";
+
+# SAFE MODE FIX: We cannot use 'rm'. 
+# If the file exists, we overwrite by starting fresh
+if (fileexists(filename)) {
+    ?"ATTENTION: Le fichier " + filename + " existe deja. Il sera ecrase.";
+}
+
+# Write header
+write(filename, "Source: " + source_name);
+write(filename, "Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)");
+
+# 5. Loop through monitors
 for (i=1:length(monitors)) {
     name = monitors{i}; # Use curly braces for cell array indexing
     
