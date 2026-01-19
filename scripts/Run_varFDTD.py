@@ -35,6 +35,7 @@ ref_star = c << c_star
 # Add HORIZONTAL straight waveguides (10µm) to the INPUT ports (o1, o2, o3)
 # These waveguides extend horizontally westward (-x direction)
 waveguide_length = 10.0  # 10 µm
+overlap = 0.02  # 0.02 µm overlap to close gap
 for port_name in ['o1', 'o2', 'o3']:
     # Get the port from the star coupler reference
     p = ref_star.ports[port_name]
@@ -43,8 +44,8 @@ for port_name in ['o1', 'o2', 'o3']:
     extension = c << gf.components.straight(length=waveguide_length, width=p.width)
     
     # Position the waveguide horizontally, extending westward from the star coupler port
-    # The waveguide's o2 port (right side) should align with the star coupler port position
-    extension.move(origin=extension.ports["o2"].center, destination=p.center)
+    # The waveguide's o2 port (right side) should align 0.02 µm into the taper to close gap
+    extension.move(origin=extension.ports["o2"].center, destination=(p.center[0] + overlap, p.center[1]))
     
     # Add a new horizontal port at the waveguide's input (o1, left side)
     # This port faces west (orientation 180°)
@@ -176,7 +177,8 @@ set("auto shutoff min", 1.00e-5);
     try:
         port = ports_info[port_name]
         x, y = port['center']
-        x_m = x * 1e-6
+        # Move source 1 µm deeper into the waveguide (toward negative x for westward-facing ports)
+        x_m = (x - 1.0) * 1e-6
         y_m = y * 1e-6
         orientation = port['orientation']
 
