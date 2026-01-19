@@ -88,12 +88,13 @@ wavelength_start = 1.5e-6
 wavelength_stop = 1.6e-6
 
 # Monitor coverage of the full component (used for index monitors)
-component_bbox = c.bbox
-bbox_min, bbox_max = component_bbox[0], component_bbox[1]
-bbox_center_x = (bbox_min[0] + bbox_max[0]) / 2
-bbox_center_y = (bbox_min[1] + bbox_max[1]) / 2
-bbox_span_x = bbox_max[0] - bbox_min[0]
-bbox_span_y = bbox_max[1] - bbox_min[1]
+component_bbox = c.bbox()
+print(component_bbox)
+print(type(component_bbox))
+bbox_center_x = (component_bbox.left + component_bbox.right) / 2
+bbox_center_y = (component_bbox.bottom + component_bbox.top) / 2
+bbox_span_x = component_bbox.right - component_bbox.left
+bbox_span_y = component_bbox.top - component_bbox.bottom
 
 # Create output folders
 fsp_folder = os.path.join(project_root, "output", "fsp")
@@ -163,8 +164,6 @@ set("simulation time", 5000e-15);
 set("mesh accuracy", 3);
 set("index", 1.444);
 set("auto shutoff min", 1.00e-5);
-set("wavelength start", {wavelength_start});
-set("wavelength stop", {wavelength_stop});
 """
         mode.eval(solver_script)
         print("  ✓ Solveur varFDTD configuré")
