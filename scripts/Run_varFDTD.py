@@ -32,19 +32,29 @@ c_star = star_coupler(n_inputs=3, n_outputs=4)
 c = gf.Component("simulation_assembly")
 ref_star = c << c_star
 
-# Add straight waveguides (10µm) to the INPUT ports (o1, o2, o3)
-# These waveguides are connected to the taper's small side
+# Add HORIZONTAL straight waveguides (10µm) to the INPUT ports (o1, o2, o3)
+# These waveguides extend horizontally westward (-x direction)
 waveguide_length = 10.0  # 10 µm
 for port_name in ['o1', 'o2', 'o3']:
     # Get the port from the star coupler reference
     p = ref_star.ports[port_name]
     
-    # Add a straight waveguide extending from this port
+    # Create a horizontal straight waveguide
     extension = c << gf.components.straight(length=waveguide_length, width=p.width)
-    extension.connect("o2", p)  # Connect output of straight to input port of star coupler
     
-    # Add the waveguide's input port to the top-level component
-    c.add_port(name=port_name, port=extension.ports["o1"])
+    # Position the waveguide horizontally, extending westward from the star coupler port
+    # The waveguide's o2 port (right side) should align with the star coupler port position
+    extension.move(origin=extension.ports["o2"].center, destination=p.center)
+    
+    # Add a new horizontal port at the waveguide's input (o1, left side)
+    # This port faces west (orientation 180°)
+    c.add_port(
+        name=port_name,
+        center=(extension.ports["o1"].center[0], extension.ports["o1"].center[1]),
+        width=p.width,
+        orientation=180,
+        layer=(1, 0)
+    )
 
 # Copy output ports from star coupler to top-level component
 for port_name in ['e1', 'e2', 'e3', 'e4']:
