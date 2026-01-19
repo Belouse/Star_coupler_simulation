@@ -85,8 +85,8 @@ print("\n[ÉTAPE 2] Préparation des simulations Lumerical...")
 wg_height = 0.22e-6  # 220 nm
 
 # Wavelength configuration (global)
-wavelength_start = 1.5e-6
-wavelength_stop = 1.6e-6
+wavelength_start = 1.55e-6
+wavelength_stop = 1.55e-6
 
 # Monitor coverage of the full component (used for index monitors)
 component_bbox = c.bbox()
@@ -162,7 +162,7 @@ set("y span", {175e-6});
 set("z", {0.11e-6});
 set("z span", {2e-6});
 set("simulation time", 5000e-15);
-set("mesh accuracy", 3);
+set("mesh accuracy", 1);
 set("index", 1.444);
 set("auto shutoff min", 1.00e-5);
 """
@@ -178,7 +178,7 @@ set("auto shutoff min", 1.00e-5);
         port = ports_info[port_name]
         x, y = port['center']
         # Move source 1 µm deeper into the waveguide (toward negative x for westward-facing ports)
-        x_m = (x - 1.0) * 1e-6
+        x_m = (x + 1.0) * 1e-6
         y_m = y * 1e-6
         orientation = port['orientation']
 
@@ -229,7 +229,7 @@ set("mode selection", "fundamental mode");
 
     try:
         global_monitor_script = f"""
-addpower;
+adddftmonitor;
 set("name", "global_profile");
 set("monitor type", "2D Z-normal");
 set("x", 0);
@@ -267,20 +267,11 @@ set("z span", {monitor_z_span});
             print(f"  ⚠ Erreur moniteur {out_name}: {e}")
     print(f"  ✓ {len(output_ports)} moniteurs de port ajoutés")
 
-    # Index and effective index monitors covering the whole star coupler
+    # Field monitors covering the whole star coupler (for index/field analysis)
     try:
         index_monitors_script = f"""
-addindexmonitor;
+adddftmonitor;
 set("name", "index_map");
-set("monitor type", "2D Z-normal");
-set("x", {bbox_center_x * 1e-6});
-set("y", {bbox_center_y * 1e-6});
-set("x span", {bbox_span_x * 1e-6});
-set("y span", {bbox_span_y * 1e-6});
-set("z", {wg_height/2});
-
-addeffectiveindex;
-set("name", "effective_index_map");
 set("monitor type", "2D Z-normal");
 set("x", {bbox_center_x * 1e-6});
 set("y", {bbox_center_y * 1e-6});
@@ -289,9 +280,9 @@ set("y span", {bbox_span_y * 1e-6});
 set("z", {wg_height/2});
 """
         mode.eval(index_monitors_script)
-        print("  ✓ Moniteurs d'index ajoutés")
+        print("  ✓ Moniteur de champ (index_map) ajouté")
     except Exception as e:
-        print(f"  ⚠ Erreur moniteurs d'index: {e}")
+        print(f"  ⚠ Erreur moniteur de champ: {e}")
 
     # Sauvegarde LMS spécifique à l'entrée
     lms_path = os.path.join(lms_folder, f"star_coupler_varFDTD_{port_name}.lms")
