@@ -25,50 +25,17 @@ print("="*70)
 print("\n[ÉTAPE 1] Génération du composant...")
 ubcpdk.PDK.activate()
 
-# Create the star coupler
-c_star = star_coupler(n_inputs=3, n_outputs=4)
-
-# Create a new top-level component with straight waveguides
-c = gf.Component("simulation_assembly")
-ref_star = c << c_star
-
-# Add HORIZONTAL straight waveguides (10µm) to the INPUT ports (o1, o2, o3)
-# These waveguides extend horizontally westward (-x direction)
-waveguide_length = 10.0  # 10 µm
-overlap = 0.02  # 0.02 µm overlap to close gap
-for port_name in ['o1', 'o2', 'o3']:
-    # Get the port from the star coupler reference
-    p = ref_star.ports[port_name]
-    
-    # Create a horizontal straight waveguide
-    extension = c << gf.components.straight(length=waveguide_length, width=p.width)
-    
-    # Position the waveguide horizontally, extending westward from the star coupler port
-    # The waveguide's o2 port (right side) should align 0.02 µm into the taper to close gap
-    extension.move(origin=extension.ports["o2"].center, destination=(p.center[0] + overlap, p.center[1]))
-    
-    # Add a new horizontal port at the waveguide's input (o1, left side)
-    # This port faces west (orientation 180°)
-    c.add_port(
-        name=port_name,
-        center=(extension.ports["o1"].center[0], extension.ports["o1"].center[1]),
-        width=p.width,
-        orientation=180,
-        layer=(1, 0)
-    )
-
-# Copy output ports from star coupler to top-level component
-for port_name in ['e1', 'e2', 'e3', 'e4']:
-    c.add_port(name=port_name, port=ref_star.ports[port_name])
+# Create the star coupler (now includes input/output waveguides)
+c = star_coupler(n_inputs=3, n_outputs=4)
 
 # Create output/gds folder if it doesn't exist
 gds_folder = os.path.join(project_root, "output", "gds")
 os.makedirs(gds_folder, exist_ok=True)
 gds_path = os.path.join(gds_folder, "star_coupler_for_mode.gds")
 c.write_gds(gds_path)
-print(f"  ✓ GDS sauvegardé avec waveguides de {waveguide_length} µm: {gds_path}")
+print(f"  ✓ GDS sauvegardé: {gds_path}")
 
-# Récupération des positions des ports (now from the assembly component)
+# Récupération des positions des ports
 ports_info = {}
 for port in c.ports:
     ports_info[port.name] = {
@@ -85,8 +52,8 @@ print("\n[ÉTAPE 2] Préparation des simulations Lumerical...")
 wg_height = 0.22e-6  # 220 nm
 
 # Wavelength configuration (global)
-wavelength_start = 1.55e-6
-wavelength_stop = 1.55e-6
+wavelength_start = 1.5e-6
+wavelength_stop = 1.6e-6
 
 # Monitor coverage of the full component (used for index monitors)
 component_bbox = c.bbox()
