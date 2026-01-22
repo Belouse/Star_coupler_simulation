@@ -378,5 +378,30 @@ import ubcpdk
 
 if __name__ == "__main__":
     ubcpdk.PDK.activate()
+    
+    # 1. Create the Star Coupler
     sc = star_coupler()
-    sc.show()
+    
+    # 2. Create a "Test Top" component to hold the FloorPlan
+    test_top = gf.Component("Test_Top_Level")
+    
+    # 3. Add the Star Coupler to the Test Top
+    ref = test_top << sc
+    ref.center = (0, 0)
+    
+    # 4. Add the FloorPlan (Layer 99/0) around the component
+    # We make it slightly larger than the component to ensure DevRec is inside
+    margin = 10.0
+    bbox = ref.dbbox()
+    floorplan_points = [
+        [bbox.left - margin, bbox.bottom - margin],
+        [bbox.right + margin, bbox.bottom - margin],
+        [bbox.right + margin, bbox.top + margin],
+        [bbox.left - margin, bbox.top + margin]
+    ]
+    
+    # Standard SiEPIC FloorPlan layer is 99/0
+    test_top.add_polygon(floorplan_points, layer=(99, 0))
+    
+    # 5. Show the Test Top (not just the component)
+    test_top.show()
