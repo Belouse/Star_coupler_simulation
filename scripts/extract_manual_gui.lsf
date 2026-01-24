@@ -113,14 +113,6 @@ for (i=1:length(monitors)) {
     }
 }
 
-# 5. Extract amplitude and phase for each output monitor
-for (monitor in monitors) {
-    amplitude = getresult(monitor, "amplitude");
-    phase = getresult(monitor, "phase");
-    ?"Amplitude for " + monitor + ": " + amplitude;
-    ?"Phase for " + monitor + ": " + phase;
-}
-
 ?"======================================================";
 ?"SUCCES: Resultats sauvegardes dans " + filename;
 ?"======================================================";
