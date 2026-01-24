@@ -150,8 +150,8 @@ def _transform_points_and_port(
 def star_coupler(
     n_inputs: int = 5,
     n_outputs: int = 4,
-    pitch_inputs: float = 5.26,
-    pitch_outputs: float = 3.55,
+    input_angle: float = 2.3,
+    output_angle: float = 1.5423,
     angle_inputs: bool = True,
     angle_outputs: bool = True,
     taper_length: float = 40.0,
@@ -208,10 +208,10 @@ def star_coupler(
     # 3. Add Output Tapers (right side)
     cx_right = width_rect / 2 - radius_eff * cos(alpha)
     offsets_out = np.arange(n_outputs) - (n_outputs - 1) / 2
-    y_positions_out = offsets_out * pitch_outputs
+    angles_out_rad = np.deg2rad(offsets_out * output_angle)  # angular spacing in degrees
+    y_positions_out = radius_eff * np.sin(angles_out_rad)
 
-    for i, y in enumerate(y_positions_out):
-        theta_rad = asin(np.clip(y / radius_eff, -1.0, 1.0))
+    for i, (theta_rad, y) in enumerate(zip(angles_out_rad, y_positions_out)):
         x_arc = cx_right + radius_eff * cos(theta_rad)
         orient_deg = degrees(theta_rad) if angle_outputs else 0.0
         
@@ -244,10 +244,10 @@ def star_coupler(
     # 4. Add Input Tapers (left side)
     cx_left = -width_rect / 2 + radius_eff * cos(alpha)
     offsets_in = np.arange(n_inputs) - (n_inputs - 1) / 2
-    y_positions_in = offsets_in * pitch_inputs
+    angles_in_rad = np.deg2rad(offsets_in * input_angle)  # angular spacing in degrees
+    y_positions_in = radius_eff * np.sin(angles_in_rad)
 
-    for i, y in enumerate(y_positions_in):
-        theta_rad = asin(np.clip(y / radius_eff, -1.0, 1.0))
+    for i, (theta_rad, y) in enumerate(zip(angles_in_rad, y_positions_in)):
         x_arc = cx_left - radius_eff * cos(theta_rad)
         orient_deg = 180 - degrees(theta_rad) if angle_inputs else 180.0
         
