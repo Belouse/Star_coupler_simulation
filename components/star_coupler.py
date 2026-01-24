@@ -24,7 +24,7 @@ def get_fpr_slab_polygons(
     radius: float = 76.5,
     width_rect: float = 80.54,
     height_rect: float = 152.824,
-    layer: Tuple[int, int] = (1, 0),
+    layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
     clad_layer: Optional[Tuple[int, int]] = (111, 0),
     clad_offset: float = 3.0,
@@ -75,7 +75,7 @@ def get_taper_polygons_and_ports(
     width2: float,
     clad_layer: Optional[Tuple[int, int]],
     clad_offset: float,
-    pdk_taper_layer: Tuple[int, int] = (1, 0),
+    pdk_taper_layer: Tuple[int, int] = (4, 0),
 ) -> Tuple[List[Tuple[np.ndarray, Tuple[int, int]]], List[gf.Port]]:
     """
     Calculates the polygons and port objects for a taper centered at (0,0).
@@ -160,7 +160,7 @@ def star_coupler(
     radius: float = 130.0,
     width_rect: float = 80.35,
     height_rect: float = 152.824,
-    layer: Tuple[int, int] = (1, 0),
+    layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
     taper_overlap: float = 0.5,
     clad_layer: Optional[Tuple[int, int]] = (111, 0),

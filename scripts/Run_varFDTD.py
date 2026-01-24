@@ -49,7 +49,7 @@ print(f"  ✓ {len(ports_info)} ports: {list(ports_info.keys())}")
 print("\n[ÉTAPE 2] Préparation des simulations Lumerical...")
 
 # --- 4. CONFIGURATION DE LA STRUCTURE ---
-wg_height = 0.22e-6  # 220 nm
+wg_height = 0.4e-6  # 400 nm SiN core (per NanoSOI specs)
 
 # Wavelength configuration (global)
 wavelength_start = 1.5e-6
@@ -82,34 +82,44 @@ print(f"\n[ÉTAPE 2] Génération de {len(input_ports)} fichiers LMS (un par ent
 for port_name in input_ports:
     print("\n" + "-"*70)
     print(f"Configuration pour la source: {port_name}")
+    
+    mode = None
     try:
-        mode = lumapi.MODE(hide=False)
+        mode = lumapi.MODE(hide=True)
+    except KeyboardInterrupt:
+        print(f"  ⚠ Interruption utilisateur")
+        if mode:
+            try:
+                mode.close()
+            except:
+                pass
+        break
     except Exception as e:
         print(f"  ✗ Erreur ouverture MODE: {e}")
-        sys.exit(1)
+        continue
 
     try:
         setup_script = f"""
 deleteall;
 switchtolayout;
 
-# Import du GDS (couche Si)
-gdsimport("{gds_path.replace(os.sep, '/')}", "{c.name}", "1:0", "Si (Silicon) - Palik", 0, {wg_height});
+# Import du GDS (couche SiN, SiePIC 4/0)
+gdsimport("{gds_path.replace(os.sep, '/')}", "{c.name}", "4:0", "Si3N4 (Silicon Nitride) - Luke", 0, {wg_height});
 
-# Substrat SiO2
+# Substrat SiO2 (BOX ~4.5 µm)
 addrect;
 set("name", "SiO2_Substrate");
 set("x", 0); set("y", 0);
 set("x span", 500e-6); set("y span", 500e-6);
-set("z min", -2e-6); set("z max", 0);
+set("z min", -4.5e-6); set("z max", 0);
 set("material", "SiO2 (Glass) - Palik");
 
-# Overcladding SiO2
+# Overcladding SiO2 (PECVD 3 µm standard)
 addrect;
 set("name", "SiO2_Overcladding");
 set("x", 0); set("y", 0);
 set("x span", 500e-6); set("y span", 500e-6);
-set("z min", {wg_height}); set("z max", {wg_height + 2e-6});
+set("z min", {wg_height}); set("z max", {wg_height + 3e-6});
 set("material", "SiO2 (Glass) - Palik");
 """
         mode.eval(setup_script)
@@ -126,8 +136,8 @@ set("x", {-7.2e-6});
 set("y", {0});
 set("x span", {235.6e-6});
 set("y span", {175e-6});
-set("z", {0.11e-6});
-set("z span", {2e-6});
+set("z", {-0.55e-6});  # Centered through BOX (4.5 µm) + core (0.4 µm) + 3 µm top cladding
+set("z span", {8.5e-6});
 set("simulation time", 5000e-15);
 set("mesh accuracy", 1);
 set("index", 1.444);
