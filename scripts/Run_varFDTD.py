@@ -154,9 +154,11 @@ set("auto shutoff min", 1.00e-5);
     try:
         port = ports_info[port_name]
         x, y = port['center']
-        # Move source 1 µm deeper into the waveguide (toward negative x for westward-facing ports)
-        x_m = (x + 1.0) * 1e-6
+        # Place source directly at the port center (no axial offset)
+        x_m = x * 1e-6
         y_m = y * 1e-6
+        # Keep default source vertical extent (do not set z / z span explicitly)
+        lateral_span = 2e-6
         orientation = port['orientation']
 
         if abs(orientation - 0) < 45 or abs(orientation - 360) < 45:
@@ -182,7 +184,7 @@ set("injection axis", "{injection_axis}");
 set("direction", "{direction}");
 set("x", {x_m});
 set("y", {y_m});
-set("y span", {2e-6});
+set("y span", {lateral_span});
 set("wavelength start", {wavelength_start});
 set("wavelength stop", {wavelength_stop});
 set("mode selection", "fundamental mode");
@@ -190,7 +192,7 @@ set("mode selection", "fundamental mode");
 
         if injection_axis == "y-axis":
             # When injecting along y, set x span instead
-            source_script = source_script.replace(f"set(\"y span\", {2e-6});", f"set(\"x span\", {2e-6});")
+            source_script = source_script.replace(f"set(\"y span\", {lateral_span});", f"set(\"x span\", {lateral_span});")
 
         mode.eval(source_script)
         print(f"  ✓ Source ajoutée: {port_name}")
