@@ -244,6 +244,32 @@ set("z span", {monitor_z_span});
             mode.eval(monitor_script)
         except Exception as e:
             print(f"  ⚠ Erreur moniteur {out_name}: {e}")
+    
+    # Add 2D frequency monitors (Z-normal) at each output port
+    # Monitor is 2 μm larger than the 0.5 μm waveguide width in Y and Z directions
+    output_monitor_y_span = 0.5e-6 + 2e-6  # waveguide width + 2 μm
+    output_monitor_z_span = wg_height + 2e-6  # waveguide height + 2 μm
+    
+    for out_name in output_ports:
+        try:
+            port = ports_info[out_name]
+            x, y = port['center']
+            x_m = x * 1e-6
+            y_m = y * 1e-6
+
+            output_monitor_script = f"""
+adddftmonitor;
+set("name", "freq_monitor_{out_name}");
+set("monitor type", "2D X-normal");
+set("x", {x_m});
+set("y", {y_m});
+set("y span", {output_monitor_y_span});
+set("z", {monitor_z_center});
+"""
+            mode.eval(output_monitor_script)
+            print(f"  ✓ Moniteur de fréquence 2D Z-normal ajouté: {out_name}")
+        except Exception as e:
+            print(f"  ⚠ Erreur moniteur de fréquence {out_name}: {e}")
     print(f"  ✓ {len(output_ports)} moniteurs de port ajoutés")
 
     # Field monitors covering the whole star coupler (for index/field analysis)
