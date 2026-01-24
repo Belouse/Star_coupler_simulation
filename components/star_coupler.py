@@ -268,7 +268,7 @@ def star_coupler(
         
         # Add port directly
         c.add_port(
-            name=f"o{i+1}",
+            name=f"i{i+1}",
             center=_snap_center(final_port['center']),
             width=final_port['width'],
             orientation=final_port['orientation'],
@@ -277,7 +277,7 @@ def star_coupler(
 
     # Build ports_info dictionary from the ports we've added
     ports_info = {}
-    for port_name in ['o1', 'o2', 'o3', "o4", "o5", 'e1', 'e2', 'e3', 'e4']:
+    for port_name in ['i1', 'i2', 'i3', "i4", "i5", 'e1', 'e2', 'e3', 'e4']:
         if port_name in c.ports:
             port = c.ports[port_name]
             ports_info[port_name] = {
@@ -288,11 +288,11 @@ def star_coupler(
 
     # --- 5. Add Input Straight Waveguides (at input ports) ---
     # Calculate the minimum x position to make all input waveguides end at the same location
-    min_x_in = min([ports_info[f"o{i+1}"]['center'][0] for i in range(n_inputs)])
+    min_x_in = min([ports_info[f"i{i+1}"]['center'][0] for i in range(n_inputs)])
     target_x_end = min_x_in - wg_overlap
     
     for i, y in enumerate(y_positions_in):
-        port = ports_info[f"o{i+1}"]
+        port = ports_info[f"i{i+1}"]
         x, y_coord = port['center']
         orient_rad = np.deg2rad(port['orientation'])
         
@@ -319,14 +319,11 @@ def star_coupler(
             clad_wg_points = np.array(clad_wg.exterior.coords)
             c.add_polygon(clad_wg_points, layer=clad_layer)
         
-        # Add port at the waveguide input (west end, orientation 180°)
-        c.add_port(
-            name=f"i{i+1}",
-            center=_snap_center((x_start, y_end)),
-            width=wg_width,
-            orientation=180,
-            layer=layer
-        )
+        # Update the existing port location to the waveguide input (west end)
+        # The port i{i+1} already exists from the taper, we need to update it
+        port_to_update = c.ports[f"i{i+1}"]
+        port_to_update.center = _snap_center((x_start, y_end))
+        port_to_update.orientation = 180
 
     # --- 6. Add Output Straight Waveguides (at output ports) ---
     # Calculate the maximum x position to make all output waveguides have the same length

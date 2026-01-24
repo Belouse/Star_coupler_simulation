@@ -26,7 +26,7 @@ print("\n[ÉTAPE 1] Génération du composant...")
 ubcpdk.PDK.activate()
 
 # Create the star coupler (now includes input/output waveguides)
-c = star_coupler(n_inputs=3, n_outputs=4)
+c = star_coupler(n_inputs=5, n_outputs=4)
 
 # Create output/gds folder if it doesn't exist
 gds_folder = os.path.join(project_root, "output", "gds")
@@ -74,7 +74,7 @@ os.makedirs(lms_folder, exist_ok=True)
 fsp_path = os.path.join(fsp_folder, "star_coupler_varFDTD.fsp")
 
 # Prepare list of input ports for per-source LMS generation
-input_ports = sorted([p for p in ports_info.keys() if p.startswith('o')])
+input_ports = sorted([p for p in ports_info.keys() if p.startswith('i')])
 output_ports = sorted([p for p in ports_info.keys() if p.startswith('e')])
 
 print(f"\n[ÉTAPE 2] Génération de {len(input_ports)} fichiers LMS (un par entrée)...")

@@ -10,3 +10,4 @@ output/fsp/
 output/lms
 output/lms/star_coupler_varFDTD_o1.lms
 simulations/
+output/
