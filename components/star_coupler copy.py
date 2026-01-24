@@ -158,7 +158,7 @@ def star_coupler(
     taper_wide: float = 3.0,
     wg_width: float = 0.5,
     radius: float = 130.0,
-    width_rect: float = 80.35,
+    width_rect: float = 80.54,
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (1, 0),
     npoints: int = 361,
