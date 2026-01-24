@@ -75,7 +75,7 @@ fsp_path = os.path.join(fsp_folder, "star_coupler_varFDTD.fsp")
 
 # Prepare list of input ports for per-source LMS generation
 input_ports = sorted([p for p in ports_info.keys() if p.startswith('i')])
-output_ports = sorted([p for p in ports_info.keys() if p.startswith('e')])
+output_ports = sorted([p for p in ports_info.keys() if p.startswith('out')])
 
 print(f"\n[ÉTAPE 2] Génération de {len(input_ports)} fichiers LMS (un par entrée)...")
 
@@ -132,7 +132,7 @@ set("material", "SiO2 (Glass) - Palik");
     try:
         solver_script = f"""
 addvarfdtd;
-set("x", {-7.2e-6});
+set("x", {0});
 set("y", {0});
 set("x span", {235.6e-6});
 set("y span", {175e-6});
