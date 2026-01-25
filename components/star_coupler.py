@@ -21,7 +21,8 @@ import ubcpdk
 
 
 def get_fpr_slab_polygons(
-    radius: float = 76.5,
+    input_radius: float = 76.5,
+    output_radius: float = 76.5,
     width_rect: float = 80.54,
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (4, 0),
@@ -30,33 +31,33 @@ def get_fpr_slab_polygons(
     clad_offset: float = 3.0,
 ) -> List[Tuple[np.ndarray, Tuple[int, int]]]:
     """
-    Calculates the polygons for the FPR slab, centered at (0,0).
+    Calculates the polygons for the FPR slab with different radii for input (left) and output (right), centered at (0,0).
     Returns a list of tuples, where each tuple is (polygon_points, layer).
     """
     polygons = []
     half_h = height_rect / 2
-    radius = max(radius, half_h)
-    alpha = np.arcsin(min(1.0, half_h / radius))
-    theta = np.linspace(alpha, -alpha, npoints)
-
-    cx_right = width_rect / 2 - radius * np.cos(alpha)
-    cx_left = -width_rect / 2 + radius * np.cos(alpha)
-
-    x_right = cx_right + radius * np.cos(theta)
-    y_right = radius * np.sin(theta)
-    x_left = cx_left - radius * np.cos(theta)
-    y_left = radius * np.sin(theta)
+    
+    # Left side (input) uses input_radius
+    radius_left = max(input_radius, half_h)
+    alpha_left = np.arcsin(min(1.0, half_h / radius_left))
+    theta_left = np.linspace(alpha_left, -alpha_left, npoints)
+    cx_left = -width_rect / 2 + radius_left * np.cos(alpha_left)
+    x_left = cx_left - radius_left * np.cos(theta_left)
+    y_left = radius_left * np.sin(theta_left)
+    
+    # Right side (output) uses output_radius
+    radius_right = max(output_radius, half_h)
+    alpha_right = np.arcsin(min(1.0, half_h / radius_right))
+    theta_right = np.linspace(alpha_right, -alpha_right, npoints)
+    cx_right = width_rect / 2 - radius_right * np.cos(alpha_right)
+    x_right = cx_right + radius_right * np.cos(theta_right)
+    y_right = radius_right * np.sin(theta_right)
 
     poly_x = np.concatenate([x_right, [-width_rect/2, -width_rect/2], x_left[::-1], [width_rect/2, width_rect/2]])
     poly_y = np.concatenate([y_right, [-half_h, half_h], y_left[::-1], [half_h, -half_h]])
 
     core_points = np.column_stack([poly_x, poly_y])
-    
-    # Center the polygons before adding cladding
-    bbox = ShapelyPolygon(core_points).bounds
-    dx = -(bbox[0] + bbox[2]) / 2
-    dy = -(bbox[1] + bbox[3]) / 2
-    core_points += np.array([dx, dy])
+    # Keep native coordinates to match taper placement; no centering shift here.
 
     polygons.append((core_points, layer))
 
@@ -156,9 +157,10 @@ def star_coupler(
     angle_outputs: bool = True,
     taper_length: float = 40.0,
     taper_wide: float = 3.0,
-    wg_width: float = 0.5,
-    radius: float = 130.0,
-    width_rect: float = 80.35,
+    wg_width: float = 1,
+    input_radius: float = 130.0,
+    output_radius: float = 170.0,
+    width_rect: float = 80.3,
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
@@ -184,15 +186,14 @@ def star_coupler(
 
     # 1. Add FPR Slab Polygons (already centered at 0,0)
     slab_polygons = get_fpr_slab_polygons(
-        radius=radius, width_rect=width_rect, height_rect=height_rect, layer=layer,
+        input_radius=input_radius, output_radius=output_radius,
+        width_rect=width_rect, height_rect=height_rect, layer=layer,
         npoints=npoints, clad_layer=clad_layer, clad_offset=clad_offset
     )
     for points, poly_layer in slab_polygons:
         c.add_polygon(points, layer=poly_layer)
 
     half_h = height_rect / 2
-    radius_eff = max(radius, half_h)
-    alpha = asin(min(1.0, half_h / radius_eff))
 
     # 2. Get Taper Geometry (once)
     taper_polygons, taper_ports = get_taper_polygons_and_ports(
@@ -206,13 +207,16 @@ def star_coupler(
 
 
     # 3. Add Output Tapers (right side)
-    cx_right = width_rect / 2 - radius_eff * cos(alpha)
+    # Use output_radius for geometric positioning (semicircle arc)
+    output_radius_eff = max(output_radius, half_h)
+    output_alpha = asin(min(1.0, half_h / output_radius_eff))
+    cx_right = width_rect / 2 - output_radius_eff * cos(output_alpha)
     offsets_out = np.arange(n_outputs) - (n_outputs - 1) / 2
     angles_out_rad = np.deg2rad(offsets_out * output_angle)  # angular spacing in degrees
-    y_positions_out = radius_eff * np.sin(angles_out_rad)
+    y_positions_out = output_radius_eff * np.sin(angles_out_rad)
 
     for i, (theta_rad, y) in enumerate(zip(angles_out_rad, y_positions_out)):
-        x_arc = cx_right + radius_eff * cos(theta_rad)
+        x_arc = cx_right + output_radius_eff * cos(theta_rad)
         orient_deg = degrees(theta_rad) if angle_outputs else 0.0
         
         rotation_deg = orient_deg - 180
@@ -242,13 +246,15 @@ def star_coupler(
 
 
     # 4. Add Input Tapers (left side)
-    cx_left = -width_rect / 2 + radius_eff * cos(alpha)
+    input_radius_eff = max(input_radius, half_h)
+    input_alpha = asin(min(1.0, half_h / input_radius_eff))
+    cx_left = -width_rect / 2 + input_radius_eff * cos(input_alpha)
     offsets_in = np.arange(n_inputs) - (n_inputs - 1) / 2
     angles_in_rad = np.deg2rad(offsets_in * input_angle)  # angular spacing in degrees
-    y_positions_in = radius_eff * np.sin(angles_in_rad)
+    y_positions_in = input_radius_eff * np.sin(angles_in_rad)
 
     for i, (theta_rad, y) in enumerate(zip(angles_in_rad, y_positions_in)):
-        x_arc = cx_left - radius_eff * cos(theta_rad)
+        x_arc = cx_left - input_radius_eff * cos(theta_rad)
         orient_deg = 180 - degrees(theta_rad) if angle_inputs else 180.0
         
         rotation_deg = orient_deg - 180
