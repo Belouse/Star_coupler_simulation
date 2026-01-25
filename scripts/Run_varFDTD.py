@@ -52,8 +52,10 @@ print("\n[ÉTAPE 2] Préparation des simulations Lumerical...")
 wg_height = 0.4e-6  # 400 nm SiN core (per NanoSOI specs)
 
 # Wavelength configuration (global)
-wavelength_start = 1.5e-6
-wavelength_stop = 1.6e-6
+# TODO: Modify for final simulation
+
+wavelength_start = 1.55e-6
+wavelength_stop = 1.55e-6
 
 # Monitor coverage of the full component (used for index monitors)
 component_bbox = c.bbox()
@@ -139,7 +141,7 @@ set("y span", {175e-6});
 set("z", {-0.55e-6});  # Centered through BOX (4.5 µm) + core (0.4 µm) + 3 µm top cladding
 set("z span", {8.5e-6});
 set("simulation time", 5000e-15); 
-set("mesh accuracy", 4);
+set("mesh accuracy", 2);
 set("index", 1.444);
 set("auto shutoff min", 1.00e-5);
 """

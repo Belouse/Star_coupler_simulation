@@ -1,0 +1,6 @@
+Source: i3
+Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)
+freq_monitor_out1, 1.55, 0.0652135, -0.0627963, -3.59796
+freq_monitor_out2, 1.55, 0.0716538, -0.719149, -41.2042
+freq_monitor_out3, 1.55, 0.0716538, -0.719149, -41.2042
+freq_monitor_out4, 1.55, 0.0652135, -0.0474395, -2.71808

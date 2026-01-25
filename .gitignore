@@ -12,3 +12,5 @@ output/fsp
 
 build/oas/
 components/__pycache__/star_coupler.cpython-311.pyc
+build/oas/
+components/__pycache__
