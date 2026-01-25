@@ -10,7 +10,10 @@ PLOT_ALL_WAVELENGTHS = False
 PLOT_AMPLITUDE = False
 PLOT_PHASE = False
 PLOT_PHASE_AMPLITUDE = True
-PLOT_PHASE_SHIFT_AMPLITUDE = False
+PLOT_PHASE_SHIFT_AMPLITUDE = True
+PLOT_PHASE_FOR_ALL_SOURCES = False
+PLOT_PHASE_ERROR_FOR_ALL_SOURCES = False
+
 
 # Path to the simulation results (last block after the final "Source:" marker is used)
 DATA_PATH = Path(r"C:\\Users\\Éloi Blouin\\Desktop\\git\\Star_coupler_simulation\\output\\simulations\\star_coupler_S_matrix_V5.txt")
@@ -174,6 +177,14 @@ def plot_phase_shift(data, ref="freq_monitor_out1", target="freq_monitor_out2"):
     plt.grid(True, alpha=0.3)
 
 
+def _get_reference_monitor_name(data, candidates=("output_i1", "freq_monitor_out1")):
+    """Return a suitable reference monitor name from candidates or fallback to the first available monitor."""
+    for name in candidates:
+        if name in data:
+            return name
+    return sorted(data.keys())[0] if data else None
+
+
 def plot_polar_phase_for_source(data, source_name):
     """Plot phase of each output port in polar coordinates (phasor diagram) for a single source."""
     monitors = sorted(data.keys())
@@ -289,9 +300,172 @@ def plot_polar_phase(data):
     ax.grid(True)
 
 
+def plot_phase_shift_all_sources(sources_data, max_sources=5):
+    """Plot phase shift (relative to i1 at 0°) for all sources in subplots.
+    
+    Creates a figure with subplots for each source (one subplot per input port).
+    Each subplot shows the phasor diagram with i1 referenced to 0°.
+    """
+    num_sources = min(len(sources_data), max_sources)
+    fig, axes = plt.subplots(1, num_sources, figsize=(5 * num_sources, 5), 
+                             subplot_kw=dict(projection='polar'))
+    
+    # Handle single subplot case
+    if num_sources == 1:
+        axes = [axes]
+    
+    colors = ['red', 'blue', 'green', 'orange', 'purple']
+    
+    for idx, (source_name, data) in enumerate(sorted(sources_data.items())[:max_sources]):
+        ax = axes[idx]
+        monitors = sorted(data.keys())
+        
+        # Get reference phase from i1
+        ref_monitor = _get_reference_monitor_name(data)
+        if ref_monitor not in data:
+            print(f"Reference monitor not found in source {source_name}")
+            continue
+        
+        try:
+            ref_phase_deg = data[ref_monitor]["phase_deg"][0]
+        except (KeyError, IndexError):
+            print(f"Reference phase unavailable for source {source_name}")
+            continue
+        
+        # Plot each monitor as a phasor
+        for monitor, color in zip(monitors, colors):
+            try:
+                magnitude = data[monitor]["transmission"][0]
+                phase_rel_deg = data[monitor]["phase_deg"][0] - ref_phase_deg
+            except (KeyError, IndexError):
+                continue
+            
+            phase_rad = np.radians(phase_rel_deg)
+            ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01,
+                    fc=color, ec=color, linewidth=2.5, label=monitor)
+            ax.text(phase_rad, magnitude + 0.01, f"{monitor}\n{phase_rel_deg:.1f}°",
+                   ha='center', va='bottom', fontsize=8, fontweight='bold')
+        
+        ax.set_ylim(0, 0.15)
+        ax.set_title(f"Source {source_name}\n({ref_monitor} = 0°)", fontsize=10, fontweight='bold')
+        ax.grid(True)
+    
+    # Remove legend duplication by using the last subplot
+    if axes:
+        axes[-1].legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=8)
+    
+    fig.suptitle("Phase shift phasor diagrams for all sources (i1 referenced to 0°)", 
+                fontsize=12, fontweight='bold', y=1.02)
+    plt.tight_layout()
+
+
+def plot_phase_error_all_sources(sources_data, max_sources=5):
+    """Plot phase error (desired vs simulated) for all sources in subplots.
+    
+    Expected phase shifts:
+    - i1: 0° (reference)
+    - i2: 90°
+    - i3: 180°
+    - i4: 270° (or -90°)
+    - i5: 180° (or custom pattern)
+    
+    Error = simulated - desired
+    """
+    # Desired phase shifts for 5 inputs (in a 5-port coupler)
+    desired_phases = {
+        'i1': 0,
+        'i2': 90,
+        'i3': 180,
+        'i4': 270,
+        'i5': 180,
+    }
+    
+    num_sources = min(len(sources_data), max_sources)
+    fig, axes = plt.subplots(1, num_sources, figsize=(5 * num_sources, 5), 
+                             subplot_kw=dict(projection='polar'))
+    
+    # Handle single subplot case
+    if num_sources == 1:
+        axes = [axes]
+    
+    colors = ['red', 'blue', 'green', 'orange', 'purple']
+    
+    for idx, (source_name, data) in enumerate(sorted(sources_data.items())[:max_sources]):
+        ax = axes[idx]
+        monitors = sorted(data.keys())
+        
+        # Get reference phase from i1
+        ref_monitor = _get_reference_monitor_name(data)
+        if ref_monitor not in data:
+            print(f"Reference monitor not found in source {source_name}")
+            continue
+        
+        try:
+            ref_phase_deg = data[ref_monitor]["phase_deg"][0]
+        except (KeyError, IndexError):
+            print(f"Reference phase unavailable for source {source_name}")
+            continue
+        
+        # Extract input number from source name (e.g., "1" from "Source 1")
+        try:
+            source_idx = int(source_name.split()[-1])
+            input_key = f'i{source_idx}'
+        except (ValueError, IndexError):
+            input_key = None
+        
+        desired_base = desired_phases.get(input_key, 0)
+        
+        # Plot each monitor as a phasor with error calculation
+        for monitor, color in zip(monitors, colors):
+            try:
+                magnitude = data[monitor]["transmission"][0]
+                phase_sim_deg = data[monitor]["phase_deg"][0] - ref_phase_deg
+            except (KeyError, IndexError):
+                continue
+            
+            # Extract output number from monitor name (e.g., "1" from "freq_monitor_out1")
+            try:
+                out_idx = int(''.join(filter(str.isdigit, monitor.split('_')[-1])))
+                output_key = f'i{out_idx}'
+            except (ValueError, IndexError):
+                output_key = None
+            
+            desired_phase = desired_phases.get(output_key, 0)
+            phase_error_deg = phase_sim_deg - desired_phase
+            
+            # Normalize error to [-180, 180]
+            while phase_error_deg > 180:
+                phase_error_deg -= 360
+            while phase_error_deg < -180:
+                phase_error_deg += 360
+            
+            phase_rad = np.radians(phase_error_deg)
+            ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01,
+                    fc=color, ec=color, linewidth=2.5, label=monitor)
+            ax.text(phase_rad, magnitude + 0.01, f"{monitor}\n{phase_error_deg:.1f}°",
+                   ha='center', va='bottom', fontsize=8, fontweight='bold')
+        
+        ax.set_ylim(0, 0.15)
+        ax.set_title(f"Source {source_name}\nPhase Error", fontsize=10, fontweight='bold')
+        ax.grid(True)
+    
+    # Remove legend duplication by using the last subplot
+    if axes:
+        axes[-1].legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=8)
+    
+    fig.suptitle("Phase error phasor diagrams for all sources (Error = Simulated - Desired)", 
+                fontsize=12, fontweight='bold', y=1.02)
+    plt.tight_layout()
+
+
 def main():
     sources_data = load_all_sources(DATA_PATH)
     print(f"Loaded sources: {list(sources_data.keys())}")
+    
+    # Filter data for all sources to closest wavelength if needed
+    filtered_sources_data = {}
+    for source_name, data in sources_data.items():
+        filtered_sources_data[source_name] = data if PLOT_ALL_WAVELENGTHS else filter_to_closest_wavelength(data, target_wavelength=1.55)
     
     # Plot data for each source
     for source_name in sorted(sources_data.keys()):
@@ -315,6 +489,14 @@ def main():
             plot_polar_phase_for_source(plot_data, source_name)
             # Referenced phasor diagram (output_i1 or freq_monitor_out1 at 0°)
             plot_polar_phase_referenced_for_source(plot_data, source_name)
+    
+    # Plot all sources phase shifts in one figure with subplots
+    if PLOT_PHASE_FOR_ALL_SOURCES:
+        plot_phase_shift_all_sources(filtered_sources_data)
+    
+    # Plot all sources phase errors in one figure with subplots
+    if PLOT_PHASE_ERROR_FOR_ALL_SOURCES:
+        plot_phase_error_all_sources(filtered_sources_data)
     
     plt.show()
 
