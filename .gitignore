@@ -6,10 +6,9 @@ temp/
 .venv/
 __pycache__/
 env/
-output/fsp/
+
 output/lms
-output/lms/star_coupler_varFDTD_o1.lms
-simulations/
-output/
+output/fsp
+
 build/oas/
 components/__pycache__/star_coupler.cpython-311.pyc

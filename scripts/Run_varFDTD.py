@@ -138,11 +138,12 @@ set("x span", {235.6e-6});
 set("y span", {175e-6});
 set("z", {-0.55e-6});  # Centered through BOX (4.5 µm) + core (0.4 µm) + 3 µm top cladding
 set("z span", {8.5e-6});
-set("simulation time", 5000e-15);
-set("mesh accuracy", 1);
+set("simulation time", 5000e-15); 
+set("mesh accuracy", 4);
 set("index", 1.444);
 set("auto shutoff min", 1.00e-5);
 """
+        # 5000e-15
         mode.eval(solver_script)
         print("  ✓ Solveur varFDTD configuré")
     except Exception as e:
