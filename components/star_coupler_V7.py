@@ -151,7 +151,7 @@ def _transform_points_and_port(
 def star_coupler(
     n_inputs: int = 5,
     n_outputs: int = 4,
-    input_angle: float = 4.2,
+    input_angle: float = 4.0,
     output_angle: float = 1.5423,
     angle_inputs: bool = True,
     angle_outputs: bool = True,

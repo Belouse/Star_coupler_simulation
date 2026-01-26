@@ -10,13 +10,13 @@ PLOT_ALL_WAVELENGTHS = False
 PLOT_AMPLITUDE = False
 PLOT_PHASE = False
 PLOT_PHASE_AMPLITUDE = True
-PLOT_PHASE_SHIFT_AMPLITUDE = True
-PLOT_PHASE_FOR_ALL_SOURCES = False
-PLOT_PHASE_ERROR_FOR_ALL_SOURCES = False
+PLOT_PHASE_SHIFT_AMPLITUDE = False
+PLOT_PHASE_FOR_ALL_SOURCES = True
+PLOT_PHASE_ERROR_FOR_ALL_SOURCES = True
 
 
 # Path to the simulation results (last block after the final "Source:" marker is used)
-DATA_PATH = Path(r"C:\\Users\\Éloi Blouin\\Desktop\\git\\Star_coupler_simulation\\output\\simulations\\star_coupler_S_matrix_V5.txt")
+DATA_PATH = Path(r"C:\\Users\\Éloi Blouin\\Desktop\\git\\Star_coupler_simulation\\output\\simulations\\star_coupler_S_matrix_V8.txt")
 
 
 def load_all_sources(path: Path):
@@ -89,7 +89,7 @@ def plot_amplitude_and_phase_for_source(data, source_name):
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
         # Amplitude plot
         for monitor, series in data.items():
-            ax1.plot(series["wavelength"], series["transmission"], marker="o", label=monitor)
+            ax1.plot(series["wavelength"], series["transmission"], marker="o", label=_display_monitor_name(monitor))
         ax1.set_title(f"Output port amplitudes - Source {source_name}")
         ax1.set_xlabel("Wavelength (um)")
         ax1.set_ylabel("Transmission (T)")
@@ -98,7 +98,7 @@ def plot_amplitude_and_phase_for_source(data, source_name):
 
         # Phase plot
         for monitor, series in data.items():
-            ax2.plot(series["wavelength"], series["phase_deg"], marker="o", label=monitor)
+            ax2.plot(series["wavelength"], series["phase_deg"], marker="o", label=_display_monitor_name(monitor))
         ax2.set_title(f"Output port phases - Source {source_name}")
         ax2.set_xlabel("Wavelength (um)")
         ax2.set_ylabel("Phase (deg)")
@@ -114,7 +114,7 @@ def plot_amplitude_and_phase_for_source(data, source_name):
 def plot_amplitude_and_phase(data):
     plt.figure(figsize=(10, 6))
     for monitor, series in data.items():
-        plt.plot(series["wavelength"], series["transmission"], marker="o", label=f"{monitor} amplitude")
+        plt.plot(series["wavelength"], series["transmission"], marker="o", label=f"{_display_monitor_name(monitor)} amplitude")
     plt.title("Output port amplitudes")
     plt.xlabel("Wavelength (um)")
     plt.ylabel("Transmission (T)")
@@ -123,7 +123,7 @@ def plot_amplitude_and_phase(data):
 
     plt.figure(figsize=(10, 6))
     for monitor, series in data.items():
-        plt.plot(series["wavelength"], series["phase_deg"], marker="o", label=f"{monitor} phase")
+        plt.plot(series["wavelength"], series["phase_deg"], marker="o", label=f"{_display_monitor_name(monitor)} phase")
     plt.title("Output port phases")
     plt.xlabel("Wavelength (um)")
     plt.ylabel("Phase (deg)")
@@ -135,7 +135,7 @@ def plot_amplitude_for_source(data, source_name):
     """Plot amplitude only for a single source."""
     plt.figure(figsize=(10, 6))
     for monitor, series in data.items():
-        plt.plot(series["wavelength"], series["transmission"], marker="o", label=monitor)
+        plt.plot(series["wavelength"], series["transmission"], marker="o", label=_display_monitor_name(monitor))
     plt.title(f"Output port amplitudes - Source {source_name}")
     plt.xlabel("Wavelength (um)")
     plt.ylabel("Transmission (T)")
@@ -147,7 +147,7 @@ def plot_phase_for_source(data, source_name):
     """Plot phase only for a single source."""
     plt.figure(figsize=(10, 6))
     for monitor, series in data.items():
-        plt.plot(series["wavelength"], series["phase_deg"], marker="o", label=monitor)
+        plt.plot(series["wavelength"], series["phase_deg"], marker="o", label=_display_monitor_name(monitor))
     plt.title(f"Output port phases - Source {source_name}")
     plt.xlabel("Wavelength (um)")
     plt.ylabel("Phase (deg)")
@@ -185,6 +185,20 @@ def _get_reference_monitor_name(data, candidates=("output_i1", "freq_monitor_out
     return sorted(data.keys())[0] if data else None
 
 
+def _display_monitor_name(name: str) -> str:
+    """Return a cleaned monitor name for plot labels.
+
+    Removes the leading 'freq_monitor_' if present.
+    Examples:
+    - 'freq_monitor_out1' -> 'out1'
+    - 'output_i1' -> 'output_i1' (unchanged)
+    """
+    prefix = "freq_monitor_"
+    if isinstance(name, str) and name.startswith(prefix):
+        return name[len(prefix):]
+    return name
+
+
 def plot_polar_phase_for_source(data, source_name):
     """Plot phase of each output port in polar coordinates (phasor diagram) for a single source."""
     monitors = sorted(data.keys())
@@ -204,10 +218,10 @@ def plot_polar_phase_for_source(data, source_name):
         
         # Plot arrow from origin to the point
         ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01, 
-                fc=color, ec=color, linewidth=2.5, label=monitor)
+            fc=color, ec=color, linewidth=2.5, label=_display_monitor_name(monitor))
         
         # Add label at the end of the arrow
-        ax.text(phase_rad, magnitude + 0.01, f"{monitor}\n{data[monitor]['phase_deg'][0]:.1f}°", 
+        ax.text(phase_rad, magnitude + 0.01, f"{_display_monitor_name(monitor)}\n{data[monitor]['phase_deg'][0]:.1f}°", 
                 ha='center', va='bottom', fontsize=9, fontweight='bold')
     
     ax.set_ylim(0, 0.15)
@@ -258,8 +272,8 @@ def plot_polar_phase_referenced_for_source(data, source_name, reference_monitor=
 
         phase_rad = np.radians(phase_rel_deg)
         ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01,
-                 fc=color, ec=color, linewidth=2.5, label=monitor)
-        ax.text(phase_rad, magnitude + 0.01, f"{monitor}\n{phase_rel_deg:.1f}°",
+                 fc=color, ec=color, linewidth=2.5, label=_display_monitor_name(monitor))
+        ax.text(phase_rad, magnitude + 0.01, f"{_display_monitor_name(monitor)}\n{phase_rel_deg:.1f}°",
                 ha='center', va='bottom', fontsize=9, fontweight='bold')
 
     ax.set_ylim(0, 0.15)
@@ -288,10 +302,10 @@ def plot_polar_phase(data):
         
         # Plot arrow from origin to the point
         ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01, 
-                fc=color, ec=color, linewidth=2.5, label=monitor)
+            fc=color, ec=color, linewidth=2.5, label=_display_monitor_name(monitor))
         
         # Add label at the end of the arrow
-        ax.text(phase_rad, magnitude + 0.01, f"{monitor}\n{data[monitor]['phase_deg'][0]:.1f}°", 
+        ax.text(phase_rad, magnitude + 0.01, f"{_display_monitor_name(monitor)}\n{data[monitor]['phase_deg'][0]:.1f}°", 
                 ha='center', va='bottom', fontsize=9, fontweight='bold')
     
     ax.set_ylim(0, 0.15)
@@ -342,41 +356,50 @@ def plot_phase_shift_all_sources(sources_data, max_sources=5):
             
             phase_rad = np.radians(phase_rel_deg)
             ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01,
-                    fc=color, ec=color, linewidth=2.5, label=monitor)
-            ax.text(phase_rad, magnitude + 0.01, f"{monitor}\n{phase_rel_deg:.1f}°",
+                    fc=color, ec=color, linewidth=2.5, label=_display_monitor_name(monitor))
+            ax.text(phase_rad, magnitude + 0.01, f"{_display_monitor_name(monitor)}\n{phase_rel_deg:.1f}°",
                    ha='center', va='bottom', fontsize=8, fontweight='bold')
         
         ax.set_ylim(0, 0.15)
-        ax.set_title(f"Source {source_name}\n({ref_monitor} = 0°)", fontsize=10, fontweight='bold')
+        # Desired phase per source (5 inputs: center i3=0°, i2/i4=90°, i1/i5=180°)
+        desired_source_phases = {
+            'i1': 180,
+            'i2': 90,
+            'i3': 0,
+            'i4': 90,
+            'i5': 180,
+        }
+        desired_phase = desired_source_phases.get(source_name, 0)
+        ax.set_title(f"Source {source_name}\n(Desired: {desired_phase}°)", fontsize=10, fontweight='bold')
         ax.grid(True)
     
     # Remove legend duplication by using the last subplot
-    if axes:
+    if num_sources > 0:
         axes[-1].legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=8)
     
     fig.suptitle("Phase shift phasor diagrams for all sources (i1 referenced to 0°)", 
-                fontsize=12, fontweight='bold', y=1.02)
-    plt.tight_layout()
+                fontsize=12, fontweight='bold', y=0.98)
+    fig.tight_layout(rect=[0, 0.02, 1, 0.95])
 
 
 def plot_phase_error_all_sources(sources_data, max_sources=5):
     """Plot phase error (desired vs simulated) for all sources in subplots.
     
-    Expected phase shifts:
-    - i1: 0° (reference)
+    Each input source has a desired phase shift relative to i1:
+    - i3: 0° (centre)
     - i2: 90°
-    - i3: 180°
-    - i4: 270° (or -90°)
-    - i5: 180° (or custom pattern)
+    - i4: 90°
+    - i1: 180°
+    - i5: 180°
     
-    Error = simulated - desired
+    Error = simulated phase shift - desired phase shift
     """
-    # Desired phase shifts for 5 inputs (in a 5-port coupler)
-    desired_phases = {
-        'i1': 0,
+    # Desired phase shifts for 5 inputs (centre i3 = 0°, i2/i4 = 90°, i1/i5 = 180°)
+    desired_source_phases = {
+        'i1': 180,
         'i2': 90,
-        'i3': 180,
-        'i4': 270,
+        'i3': 0,
+        'i4': 90,
         'i5': 180,
     }
     
@@ -406,14 +429,8 @@ def plot_phase_error_all_sources(sources_data, max_sources=5):
             print(f"Reference phase unavailable for source {source_name}")
             continue
         
-        # Extract input number from source name (e.g., "1" from "Source 1")
-        try:
-            source_idx = int(source_name.split()[-1])
-            input_key = f'i{source_idx}'
-        except (ValueError, IndexError):
-            input_key = None
-        
-        desired_base = desired_phases.get(input_key, 0)
+        # Extract input number from source name (e.g., "i1", "i2")
+        desired_phase_shift = desired_source_phases.get(source_name, 0)
         
         # Plot each monitor as a phasor with error calculation
         for monitor, color in zip(monitors, colors):
@@ -423,15 +440,8 @@ def plot_phase_error_all_sources(sources_data, max_sources=5):
             except (KeyError, IndexError):
                 continue
             
-            # Extract output number from monitor name (e.g., "1" from "freq_monitor_out1")
-            try:
-                out_idx = int(''.join(filter(str.isdigit, monitor.split('_')[-1])))
-                output_key = f'i{out_idx}'
-            except (ValueError, IndexError):
-                output_key = None
-            
-            desired_phase = desired_phases.get(output_key, 0)
-            phase_error_deg = phase_sim_deg - desired_phase
+            # Error = simulated - desired
+            phase_error_deg = phase_sim_deg - desired_phase_shift
             
             # Normalize error to [-180, 180]
             while phase_error_deg > 180:
@@ -441,21 +451,22 @@ def plot_phase_error_all_sources(sources_data, max_sources=5):
             
             phase_rad = np.radians(phase_error_deg)
             ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01,
-                    fc=color, ec=color, linewidth=2.5, label=monitor)
-            ax.text(phase_rad, magnitude + 0.01, f"{monitor}\n{phase_error_deg:.1f}°",
-                   ha='center', va='bottom', fontsize=8, fontweight='bold')
+                     fc=color, ec=color, linewidth=2.5, label=_display_monitor_name(monitor))
+            ax.text(phase_rad, magnitude + 0.01, f"{_display_monitor_name(monitor)}\n{phase_error_deg:.1f}°",
+                    ha='center', va='bottom', fontsize=8, fontweight='bold')
         
         ax.set_ylim(0, 0.15)
-        ax.set_title(f"Source {source_name}\nPhase Error", fontsize=10, fontweight='bold')
+        ax.set_title(f"Source {source_name}\n(Desired: {desired_phase_shift}°)", fontsize=10, fontweight='bold')
         ax.grid(True)
     
     # Remove legend duplication by using the last subplot
-    if axes:
+    # Remove legend duplication by using the last subplot
+    if num_sources > 0:
         axes[-1].legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=8)
     
     fig.suptitle("Phase error phasor diagrams for all sources (Error = Simulated - Desired)", 
-                fontsize=12, fontweight='bold', y=1.02)
-    plt.tight_layout()
+                fontsize=12, fontweight='bold', y=0.98)
+    fig.tight_layout(rect=[0, 0.02, 1, 0.95])
 
 
 def main():

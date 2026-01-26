@@ -1,0 +1,30 @@
+Source: i1
+Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)
+freq_monitor_out1, 1.55, 0.0258726, -2.53527, -145.26
+freq_monitor_out2, 1.55, 0.0584155, 1.06242, 60.8721
+freq_monitor_out3, 1.55, 0.0687623, -1.89746, -108.716
+freq_monitor_out4, 1.55, 0.0666265, 1.523, 87.2616
+Source: i2
+Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)
+freq_monitor_out1, 1.55, 0.0699211, 2.03192, 116.421
+freq_monitor_out2, 1.55, 0.0785493, -2.56803, -147.137
+freq_monitor_out3, 1.55, 0.0633752, -0.719649, -41.2329
+freq_monitor_out4, 1.55, 0.0663442, 0.961826, 55.1086
+Source: i3
+Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)
+freq_monitor_out1, 1.55, 0.0663079, 1.11893, 64.1099
+freq_monitor_out2, 1.55, 0.072228, 1.16268, 66.6165
+freq_monitor_out3, 1.55, 0.072228, 1.14619, 65.6718
+freq_monitor_out4, 1.55, 0.0663079, 1.11833, 64.0758
+Source: i4
+Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)
+freq_monitor_out1, 1.55, 0.0663442, 0.976546, 55.9519
+freq_monitor_out2, 1.55, 0.0633752, -0.706843, -40.4991
+freq_monitor_out3, 1.55, 0.0785493, -2.52761, -144.821
+freq_monitor_out4, 1.55, 0.0699211, 2.10379, 120.538
+Source: i5
+Monitor, Wavelength(um), Transmission(T), Phase(rad), Phase(deg)
+freq_monitor_out1, 1.55, 0.0666265, 1.58018, 90.5379
+freq_monitor_out2, 1.55, 0.0687623, -1.8118, -103.809
+freq_monitor_out3, 1.55, 0.0584155, 1.12173, 64.2703
+freq_monitor_out4, 1.55, 0.0258726, -2.51237, -143.948
