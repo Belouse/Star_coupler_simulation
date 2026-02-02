@@ -151,7 +151,7 @@ def _transform_points_and_port(
 def star_coupler(
     n_inputs: int = 5,
     n_outputs: int = 4,
-    input_angle: float = 4.2,
+    input_angle: float = 2.3,
     output_angle: float = 1.5423,
     angle_inputs: bool = True,
     angle_outputs: bool = True,
@@ -164,12 +164,12 @@ def star_coupler(
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
-    taper_overlap: float = 0.2,
+    taper_overlap: float = 0.5,
     clad_layer: Optional[Tuple[int, int]] = (111, 0),
     clad_offset: float = 3.0,
     input_wg_length: float = 10.0,
     output_wg_length: float = 10.0,
-    wg_overlap: float = 0.1,
+    wg_overlap: float = 0.02,
 ) -> gf.Component:
     """
     Star Coupler (Manual Flattening Version).

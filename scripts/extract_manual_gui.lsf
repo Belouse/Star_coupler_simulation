@@ -4,7 +4,7 @@
 clear;
 
 # 1. Define your output monitors
-monitors = {"monitor_e1", "monitor_e2", "monitor_e3", "monitor_e4"};
+monitors = {"freq_monitor_out1", "freq_monitor_out2", "freq_monitor_out3", "freq_monitor_out4"};
 
 # 2. Check if results exist
 if (layoutmode) {

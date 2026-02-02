@@ -26,7 +26,7 @@ print("\n[ÉTAPE 1] Génération du composant...")
 ubcpdk.PDK.activate()
 
 # Create the star coupler (now includes input/output waveguides)
-c = star_coupler(n_inputs=3, n_outputs=4)
+c = star_coupler(n_inputs=5, n_outputs=4)
 
 # Create output/gds folder if it doesn't exist
 gds_folder = os.path.join(project_root, "output", "gds")
@@ -49,11 +49,13 @@ print(f"  ✓ {len(ports_info)} ports: {list(ports_info.keys())}")
 print("\n[ÉTAPE 2] Préparation des simulations Lumerical...")
 
 # --- 4. CONFIGURATION DE LA STRUCTURE ---
-wg_height = 0.22e-6  # 220 nm
+wg_height = 0.4e-6  # 400 nm SiN core (per NanoSOI specs)
 
 # Wavelength configuration (global)
-wavelength_start = 1.5e-6
-wavelength_stop = 1.6e-6
+# TODO: Modify for final simulation
+
+wavelength_start = 1.55e-6
+wavelength_stop = 1.55e-6
 
 # Monitor coverage of the full component (used for index monitors)
 component_bbox = c.bbox()
@@ -74,42 +76,52 @@ os.makedirs(lms_folder, exist_ok=True)
 fsp_path = os.path.join(fsp_folder, "star_coupler_varFDTD.fsp")
 
 # Prepare list of input ports for per-source LMS generation
-input_ports = sorted([p for p in ports_info.keys() if p.startswith('o')])
-output_ports = sorted([p for p in ports_info.keys() if p.startswith('e')])
+input_ports = sorted([p for p in ports_info.keys() if p.startswith('i')])
+output_ports = sorted([p for p in ports_info.keys() if p.startswith('out')])
 
 print(f"\n[ÉTAPE 2] Génération de {len(input_ports)} fichiers LMS (un par entrée)...")
 
 for port_name in input_ports:
     print("\n" + "-"*70)
     print(f"Configuration pour la source: {port_name}")
+    
+    mode = None
     try:
-        mode = lumapi.MODE(hide=False)
+        mode = lumapi.MODE(hide=True)
+    except KeyboardInterrupt:
+        print(f"  ⚠ Interruption utilisateur")
+        if mode:
+            try:
+                mode.close()
+            except:
+                pass
+        break
     except Exception as e:
         print(f"  ✗ Erreur ouverture MODE: {e}")
-        sys.exit(1)
+        continue
 
     try:
         setup_script = f"""
 deleteall;
 switchtolayout;
 
-# Import du GDS (couche Si)
-gdsimport("{gds_path.replace(os.sep, '/')}", "{c.name}", "1:0", "Si (Silicon) - Palik", 0, {wg_height});
+# Import du GDS (couche SiN, SiePIC 4/0)
+gdsimport("{gds_path.replace(os.sep, '/')}", "{c.name}", "4:0", "Si3N4 (Silicon Nitride) - Luke", 0, {wg_height});
 
-# Substrat SiO2
+# Substrat SiO2 (BOX ~4.5 µm)
 addrect;
 set("name", "SiO2_Substrate");
 set("x", 0); set("y", 0);
 set("x span", 500e-6); set("y span", 500e-6);
-set("z min", -2e-6); set("z max", 0);
+set("z min", -4.5e-6); set("z max", 0);
 set("material", "SiO2 (Glass) - Palik");
 
-# Overcladding SiO2
+# Overcladding SiO2 (PECVD 3 µm standard)
 addrect;
 set("name", "SiO2_Overcladding");
 set("x", 0); set("y", 0);
 set("x span", 500e-6); set("y span", 500e-6);
-set("z min", {wg_height}); set("z max", {wg_height + 2e-6});
+set("z min", {wg_height}); set("z max", {wg_height + 3e-6});
 set("material", "SiO2 (Glass) - Palik");
 """
         mode.eval(setup_script)
@@ -122,17 +134,18 @@ set("material", "SiO2 (Glass) - Palik");
     try:
         solver_script = f"""
 addvarfdtd;
-set("x", {-7.2e-6});
+set("x", {0});
 set("y", {0});
 set("x span", {235.6e-6});
 set("y span", {175e-6});
-set("z", {0.11e-6});
-set("z span", {2e-6});
-set("simulation time", 5000e-15);
-set("mesh accuracy", 1);
+set("z", {-0.55e-6});  # Centered through BOX (4.5 µm) + core (0.4 µm) + 3 µm top cladding
+set("z span", {8.5e-6});
+set("simulation time", 5000e-15); 
+set("mesh accuracy", 3);
 set("index", 1.444);
 set("auto shutoff min", 1.00e-5);
 """
+        # 5000e-15
         mode.eval(solver_script)
         print("  ✓ Solveur varFDTD configuré")
     except Exception as e:
@@ -144,9 +157,11 @@ set("auto shutoff min", 1.00e-5);
     try:
         port = ports_info[port_name]
         x, y = port['center']
-        # Move source 1 µm deeper into the waveguide (toward negative x for westward-facing ports)
-        x_m = (x + 1.0) * 1e-6
+        # Place source directly at the port center (no axial offset)
+        x_m = x * 1e-6
         y_m = y * 1e-6
+        # Keep default source vertical extent (do not set z / z span explicitly)
+        lateral_span = 2e-6
         orientation = port['orientation']
 
         if abs(orientation - 0) < 45 or abs(orientation - 360) < 45:
@@ -172,7 +187,7 @@ set("injection axis", "{injection_axis}");
 set("direction", "{direction}");
 set("x", {x_m});
 set("y", {y_m});
-set("y span", {2e-6});
+set("y span", {lateral_span});
 set("wavelength start", {wavelength_start});
 set("wavelength stop", {wavelength_stop});
 set("mode selection", "fundamental mode");
@@ -180,7 +195,7 @@ set("mode selection", "fundamental mode");
 
         if injection_axis == "y-axis":
             # When injecting along y, set x span instead
-            source_script = source_script.replace(f"set(\"y span\", {2e-6});", f"set(\"x span\", {2e-6});")
+            source_script = source_script.replace(f"set(\"y span\", {lateral_span});", f"set(\"x span\", {lateral_span});")
 
         mode.eval(source_script)
         print(f"  ✓ Source ajoutée: {port_name}")
@@ -232,6 +247,32 @@ set("z span", {monitor_z_span});
             mode.eval(monitor_script)
         except Exception as e:
             print(f"  ⚠ Erreur moniteur {out_name}: {e}")
+    
+    # Add 2D frequency monitors (Z-normal) at each output port
+    # Monitor is 2 μm larger than the 0.5 μm waveguide width in Y and Z directions
+    output_monitor_y_span = 0.5e-6 + 2e-6  # waveguide width + 2 μm
+    output_monitor_z_span = wg_height + 2e-6  # waveguide height + 2 μm
+    
+    for out_name in output_ports:
+        try:
+            port = ports_info[out_name]
+            x, y = port['center']
+            x_m = x * 1e-6
+            y_m = y * 1e-6
+
+            output_monitor_script = f"""
+adddftmonitor;
+set("name", "freq_monitor_{out_name}");
+set("monitor type", "2D X-normal");
+set("x", {x_m});
+set("y", {y_m});
+set("y span", {output_monitor_y_span});
+set("z", {monitor_z_center});
+"""
+            mode.eval(output_monitor_script)
+            print(f"  ✓ Moniteur de fréquence 2D Z-normal ajouté: {out_name}")
+        except Exception as e:
+            print(f"  ⚠ Erreur moniteur de fréquence {out_name}: {e}")
     print(f"  ✓ {len(output_ports)} moniteurs de port ajoutés")
 
     # Field monitors covering the whole star coupler (for index/field analysis)

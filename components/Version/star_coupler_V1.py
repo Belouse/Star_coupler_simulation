@@ -24,7 +24,7 @@ def get_fpr_slab_polygons(
     radius: float = 76.5,
     width_rect: float = 80.54,
     height_rect: float = 152.824,
-    layer: Tuple[int, int] = (1, 0),
+    layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
     clad_layer: Optional[Tuple[int, int]] = (111, 0),
     clad_offset: float = 3.0,
@@ -75,7 +75,7 @@ def get_taper_polygons_and_ports(
     width2: float,
     clad_layer: Optional[Tuple[int, int]],
     clad_offset: float,
-    pdk_taper_layer: Tuple[int, int] = (1, 0),
+    pdk_taper_layer: Tuple[int, int] = (4, 0),
 ) -> Tuple[List[Tuple[np.ndarray, Tuple[int, int]]], List[gf.Port]]:
     """
     Calculates the polygons and port objects for a taper centered at (0,0).
@@ -150,17 +150,17 @@ def _transform_points_and_port(
 def star_coupler(
     n_inputs: int = 5,
     n_outputs: int = 4,
-    pitch_inputs: float = 5.26,
-    pitch_outputs: float = 3.55,
+    input_angle: float = 2.3,
+    output_angle: float = 1.5423,
     angle_inputs: bool = True,
     angle_outputs: bool = True,
     taper_length: float = 40.0,
     taper_wide: float = 3.0,
     wg_width: float = 0.5,
     radius: float = 130.0,
-    width_rect: float = 80.54,
+    width_rect: float = 80.35,
     height_rect: float = 152.824,
-    layer: Tuple[int, int] = (1, 0),
+    layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
     taper_overlap: float = 0.5,
     clad_layer: Optional[Tuple[int, int]] = (111, 0),
@@ -208,10 +208,10 @@ def star_coupler(
     # 3. Add Output Tapers (right side)
     cx_right = width_rect / 2 - radius_eff * cos(alpha)
     offsets_out = np.arange(n_outputs) - (n_outputs - 1) / 2
-    y_positions_out = offsets_out * pitch_outputs
+    angles_out_rad = np.deg2rad(offsets_out * output_angle)  # angular spacing in degrees
+    y_positions_out = radius_eff * np.sin(angles_out_rad)
 
-    for i, y in enumerate(y_positions_out):
-        theta_rad = asin(np.clip(y / radius_eff, -1.0, 1.0))
+    for i, (theta_rad, y) in enumerate(zip(angles_out_rad, y_positions_out)):
         x_arc = cx_right + radius_eff * cos(theta_rad)
         orient_deg = degrees(theta_rad) if angle_outputs else 0.0
         
@@ -244,10 +244,10 @@ def star_coupler(
     # 4. Add Input Tapers (left side)
     cx_left = -width_rect / 2 + radius_eff * cos(alpha)
     offsets_in = np.arange(n_inputs) - (n_inputs - 1) / 2
-    y_positions_in = offsets_in * pitch_inputs
+    angles_in_rad = np.deg2rad(offsets_in * input_angle)  # angular spacing in degrees
+    y_positions_in = radius_eff * np.sin(angles_in_rad)
 
-    for i, y in enumerate(y_positions_in):
-        theta_rad = asin(np.clip(y / radius_eff, -1.0, 1.0))
+    for i, (theta_rad, y) in enumerate(zip(angles_in_rad, y_positions_in)):
         x_arc = cx_left - radius_eff * cos(theta_rad)
         orient_deg = 180 - degrees(theta_rad) if angle_inputs else 180.0
         
@@ -268,7 +268,7 @@ def star_coupler(
         
         # Add port directly
         c.add_port(
-            name=f"o{i+1}",
+            name=f"i{i+1}",
             center=_snap_center(final_port['center']),
             width=final_port['width'],
             orientation=final_port['orientation'],
@@ -277,7 +277,7 @@ def star_coupler(
 
     # Build ports_info dictionary from the ports we've added
     ports_info = {}
-    for port_name in ['o1', 'o2', 'o3', "o4", "o5", 'e1', 'e2', 'e3', 'e4']:
+    for port_name in ['i1', 'i2', 'i3', "i4", "i5", 'e1', 'e2', 'e3', 'e4']:
         if port_name in c.ports:
             port = c.ports[port_name]
             ports_info[port_name] = {
@@ -288,11 +288,11 @@ def star_coupler(
 
     # --- 5. Add Input Straight Waveguides (at input ports) ---
     # Calculate the minimum x position to make all input waveguides end at the same location
-    min_x_in = min([ports_info[f"o{i+1}"]['center'][0] for i in range(n_inputs)])
+    min_x_in = min([ports_info[f"i{i+1}"]['center'][0] for i in range(n_inputs)])
     target_x_end = min_x_in - wg_overlap
     
     for i, y in enumerate(y_positions_in):
-        port = ports_info[f"o{i+1}"]
+        port = ports_info[f"i{i+1}"]
         x, y_coord = port['center']
         orient_rad = np.deg2rad(port['orientation'])
         
@@ -319,14 +319,11 @@ def star_coupler(
             clad_wg_points = np.array(clad_wg.exterior.coords)
             c.add_polygon(clad_wg_points, layer=clad_layer)
         
-        # Add port at the waveguide input (west end, orientation 180°)
-        c.add_port(
-            name=f"i{i+1}",
-            center=_snap_center((x_start, y_end)),
-            width=wg_width,
-            orientation=180,
-            layer=layer
-        )
+        # Update the existing port location to the waveguide input (west end)
+        # The port i{i+1} already exists from the taper, we need to update it
+        port_to_update = c.ports[f"i{i+1}"]
+        port_to_update.center = _snap_center((x_start, y_end))
+        port_to_update.orientation = 180
 
     # --- 6. Add Output Straight Waveguides (at output ports) ---
     # Calculate the maximum x position to make all output waveguides have the same length

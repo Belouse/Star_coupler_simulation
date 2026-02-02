@@ -151,7 +151,7 @@ def _transform_points_and_port(
 def star_coupler(
     n_inputs: int = 5,
     n_outputs: int = 4,
-    input_angle: float = 4.2,
+    input_angle: float = 2.3,
     output_angle: float = 1.5423,
     angle_inputs: bool = True,
     angle_outputs: bool = True,
@@ -159,17 +159,17 @@ def star_coupler(
     taper_wide: float = 3.0,
     wg_width: float = 1,
     input_radius: float = 130.0,
-    output_radius: float = 120.0,
+    output_radius: float = 170.0,
     width_rect: float = 80.3,
     height_rect: float = 152.824,
     layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
-    taper_overlap: float = 0.2,
+    taper_overlap: float = 0.5,
     clad_layer: Optional[Tuple[int, int]] = (111, 0),
     clad_offset: float = 3.0,
     input_wg_length: float = 10.0,
     output_wg_length: float = 10.0,
-    wg_overlap: float = 0.1,
+    wg_overlap: float = 0.02,
 ) -> gf.Component:
     """
     Star Coupler (Manual Flattening Version).
@@ -332,6 +332,9 @@ def star_coupler(
         port_to_update.orientation = 180
 
     # --- 6. Add Output Straight Waveguides (at output ports) ---
+    # Calculate the maximum x position to make all output waveguides have the same length
+    max_x_out = max([ports_info[f"e{i+1}"]['center'][0] for i in range(n_outputs)])
+    target_x_end = max_x_out + wg_overlap + output_wg_length
     
     for i, y in enumerate(y_positions_out):
         port = ports_info[f"e{i+1}"]
@@ -343,9 +346,8 @@ def star_coupler(
         
         # Create output waveguide polygon (horizontal, extending eastward)
         # Positioned so left end overlaps by wg_overlap into the taper
-
-        x_end = x_start + output_wg_length
-
+        # All waveguides end at the same x position (target_x_end)
+        x_end = target_x_end
         
         wg_half_width = wg_width / 2
         wg_points = np.array([
@@ -364,10 +366,10 @@ def star_coupler(
             c.add_polygon(clad_wg_points, layer=clad_layer)
         
         # Add port at the waveguide output (east end, orientation 0°)
-
+        # All ports aligned vertically at target_x_end
         c.add_port(
             name=f"out{i+1}",
-            center=_snap_center((x_end, y_coord)),
+            center=_snap_center((target_x_end, y_coord)),
             width=wg_width,
             orientation=0,
             layer=layer
