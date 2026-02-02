@@ -381,7 +381,16 @@ def connect_star_coupler_inputs_to_gcs(
 		gc_index = start_gc_index + i
 		if gc_index >= len(gc_refs):
 			break
-		gc_ports.append(list(gc_refs[gc_index].ports)[0])
+		gc_port = list(gc_refs[gc_index].ports)[0]
+		gc_ports.append(
+			gf.Port(
+				name=f"gc_{gc_index}",
+				center=gc_port.center,
+				width=gc_port.width,
+				orientation=gc_port.orientation,
+				layer=gf.get_layer(SIN_LAYER),
+			)
+		)
 
 	def _normalize_port_width(port: gf.Port, target_width: float, length: float = 10.0) -> gf.Port:
 		"""Insert a taper if needed so the returned port has target_width."""
@@ -561,8 +570,8 @@ OUTPUT_DIR = ROOT_DIR / "output" / "gds"
 # Target lower-left origin for the chip (in um)
 CHIP_ORIGIN = (3143.33023, 6156.66426)
 
-# Waveguide layer from UBC PDK
-SIN_LAYER = ubcpdk.LAYER.WG
+# SiN waveguide layer (SiePIC 4/0)
+SIN_LAYER = (4, 0)
 
 
 def find_subdie_cell(cell: gf.Component, target_name: str) -> gf.Component | None:
