@@ -421,6 +421,14 @@ def connect_star_coupler_inputs_to_gcs(
 			return ref.ports["o2"]
 		return port
 
+	def _extend_port(port: gf.Port, length: float = 25.0) -> gf.Port:
+		"""Extend a port in its facing direction by a straight of given length."""
+		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
+		straight = gf.components.straight(length=length, cross_section=cs_port)
+		ref = circuit << straight
+		ref.connect("o1", port)
+		return ref.ports["o2"]
+
 	if input_ports and gc_ports:
 		count = min(len(input_ports), len(gc_ports))
 		input_ports = input_ports[:count]
@@ -460,6 +468,9 @@ def connect_star_coupler_inputs_to_gcs(
 		sbend_in = [p for i, p in enumerate(input_ports_norm) if i in sbend_indices]
 		sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in sbend_indices]
 
+		# Push bends 25um to the right by extending GC-side ports (bundle only)
+		bundle_gc = [_extend_port(p, 35.0) for p in bundle_gc]
+
 		if bundle_in and bundle_gc:
 			gf.routing.route_bundle(
 				circuit,
@@ -468,6 +479,7 @@ def connect_star_coupler_inputs_to_gcs(
 				cross_section=cs,
 				radius=bend_radius,
 				sort_ports=False,
+				separation=10.0
 			)
 
 		if sbend_in and sbend_gc:
@@ -535,7 +547,7 @@ def generate_SC_circuit(
 		n_inputs=5,
 		n_outputs=4,
 	)
-	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-450.0)
+	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-470.0)
 	connect_star_coupler_inputs_to_gcs(
 		circuit,
 		star_ref=sc_ports["ref"],
