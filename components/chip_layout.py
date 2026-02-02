@@ -23,7 +23,7 @@ def add_input_grating_coupler_array(
 	num_couplers: int = 8,
 	pitch: float = 127.0,
 	orientation: str = "East",
-) -> list[tuple[float, float]]:
+) -> list:
 	"""Add input grating coupler array to circuit.
 	
 	Args:
@@ -34,7 +34,7 @@ def add_input_grating_coupler_array(
 		orientation: Output direction ("North", "South", "East", "West").
 	
 	Returns:
-		List of output port positions (x, y) for routing.
+		List of grating coupler instance references.
 	"""
 	gc = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
 	
@@ -46,19 +46,19 @@ def add_input_grating_coupler_array(
 	}
 	
 	config = orientation_map[orientation]
-	output_positions = []
-	
+	gc_refs = []
+
 	for i in range(num_couplers):
 		gc_ref = circuit << gc
 		x_pos = origin[0] + i * config["dx"]
 		y_pos = origin[1] + i * config["dy"]
 		gc_ref.move((x_pos, y_pos))
 		gc_ref.rotate(config["angle"])
-		
-		# Store output port position for routing (offset from GC position)
-		output_positions.append((x_pos + 10, y_pos))  # 10um offset
-	
-	return output_positions
+        
+		# Store instance reference for later routing
+		gc_refs.append(gc_ref)
+
+	return gc_refs
 
 
 def add_star_coupler(
@@ -148,7 +148,7 @@ def add_output_grating_coupler_array(
 	num_couplers: int = 8,
 	pitch: float = 127.0,
 	orientation: str = "West",
-) -> list[tuple[float, float]]:
+) -> list:
 	"""Add output grating coupler array to circuit.
 	
 	Args:
@@ -159,7 +159,7 @@ def add_output_grating_coupler_array(
 		orientation: Input direction ("North", "South", "East", "West").
 	
 	Returns:
-		List of input port positions (x, y) for routing.
+		List of grating coupler instance references.
 	"""
 	gc = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
 	
@@ -171,26 +171,117 @@ def add_output_grating_coupler_array(
 	}
 	
 	config = orientation_map[orientation]
-	input_positions = []
-	
+	gc_refs = []
+
 	for i in range(num_couplers):
 		gc_ref = circuit << gc
 		x_pos = origin[0] + i * config["dx"]
 		y_pos = origin[1] + i * config["dy"]
 		gc_ref.move((x_pos, y_pos))
 		gc_ref.rotate(config["angle"])
-		
-		# Store input port position for routing
-		input_positions.append((x_pos - 10, y_pos))  # 10um offset
-	
-	return input_positions
+
+		gc_refs.append(gc_ref)
+
+	return gc_refs
+
+
+def connect_gc_top_bottom_drawn(
+	circuit: gf.Component,
+	gc_refs: list,
+	front_dx: float = 20.0,
+	first_drop: float = 20.0,
+	back_offset: float = 40.0,
+	bottom_rise: float = 20.0,
+	bottom_dx1: float = 30.0,
+	bottom_dx2: float = 30.0,
+	end_dx: float = 0.0,
+) -> None:
+	"""Connect top GC to bottom GC following the drawn path (image #3).
+
+	Path intent (from top):
+	- short straight from top GC (east)
+	- right bend (south)
+	- right bend (west) to the left backbone
+	- long vertical backbone behind the GC array
+	- bottom segment: taper, left bend, left bend, straight, right turn into backbone
+	"""
+	if len(gc_refs) < 2:
+		raise ValueError("Need at least 2 grating couplers")
+
+	top = gc_refs[0]
+	bottom = gc_refs[-1]
+	p_top = list(top.ports)[0]
+	p_bottom = list(bottom.ports)[0]
+
+	xs = [ref.center[0] for ref in gc_refs]
+	x_back = min(xs) - back_offset
+
+	x_top = p_top.x
+	y_top = p_top.y
+	y_bottom = p_bottom.y
+
+	# Waypoints (absolute coordinates) defining the drawn path
+	# Bottom logic (reverse of user description):
+	# backbone -> right -> down -> right -> down -> into GC
+	y_mid = y_bottom + bottom_rise
+	x_b1 = p_bottom.x - end_dx - bottom_dx1 - bottom_dx2
+	x_b2 = p_bottom.x - end_dx - bottom_dx1
+
+	# Build explicit SiN waveguide segments with Euler bends and taper
+	cs = ubcpdk.PDK.cross_sections["strip"]
+	bend_r = gf.components.bend_euler(angle=-90, cross_section=cs)
+	bend_l = gf.components.bend_euler(angle=90, cross_section=cs)
+
+	def add_straight(length: float) -> gf.ComponentReference:
+		return circuit << gf.components.straight(length=length, cross_section=cs)
+
+	def place_chain(start_port, elements):
+		current_port = start_port
+		for comp in elements:
+			ref = circuit << comp
+			ref.connect("o1", current_port)
+			current_port = ref.ports["o2"]
+		return current_port
+
+	# Top segment: taper -> right bend -> right bend -> straight to backbone top
+	# Taper from GC width to waveguide width
+	taper_top = gf.components.taper(length=20, width1=0.75, width2=0.5, cross_section=cs)
+	cur = place_chain(p_top, [taper_top])
+	cur = place_chain(cur, [gf.components.straight(length=front_dx, cross_section=cs)])
+	cur = place_chain(cur, [bend_r])
+	cur = place_chain(cur, [gf.components.straight(length=first_drop, cross_section=cs)])
+	cur = place_chain(cur, [bend_r])
+	straight_len = max(10, cur.x - x_back)
+	cur = place_chain(cur, [gf.components.straight(length=straight_len, cross_section=cs)])
+
+	# Backbone vertical straight from top to bottom anchor
+	backbone_len = max(10, cur.y - y_mid)
+	backbone = circuit << gf.components.straight(length=backbone_len, cross_section=cs)
+	backbone.rotate(90)
+	backbone.connect("o1", cur)
+	backbone_bottom = backbone.ports["o2"]
+
+	# Bottom segment: taper -> left bend -> left bend -> straight -> right bend into backbone
+	taper_bot = gf.components.taper(length=20, width1=0.75, width2=0.5, cross_section=cs)
+	cur_b = place_chain(p_bottom, [taper_bot])
+	cur_b = place_chain(cur_b, [bend_l])
+	cur_b = place_chain(cur_b, [gf.components.straight(length=bottom_rise, cross_section=cs)])
+	cur_b = place_chain(cur_b, [bend_l])
+	straight_len_b = max(10, cur_b.x - x_back)
+	cur_b = place_chain(cur_b, [gf.components.straight(length=straight_len_b, cross_section=cs)])
+	cur_b = place_chain(cur_b, [bend_r])
+	# Connect to backbone bottom by a short straight if needed
+	join_len = max(10, cur_b.y - backbone_bottom.y)
+	cur_b = place_chain(cur_b, [gf.components.straight(length=join_len, cross_section=cs)])
+
+	print(f"[OK] Drew top->bottom GC with Euler bends + taper, back x={x_back}")
 
 
 def generate_SC_circuit(
 	parent_cell: gf.Component,
 	origin: tuple[float, float] = (0, 0),
 	num_inputs: int = 8,
-	num_outputs: int = 8,
+	num_outputs: int = 0,
 	gc_pitch: float = 127.0,
 ) -> gf.Component:
 	"""Generate complete Star Coupler circuit with all components.
@@ -227,8 +318,8 @@ def generate_SC_circuit(
 	merger_start_pos = (600, 0)
 	output_gc_pos = (800, 0)
 	
-	# 1. Add input grating couplers
-	input_ports = add_input_grating_coupler_array(
+	# 1. Add input grating couplers (returns instance refs)
+	input_gc_refs = add_input_grating_coupler_array(
 		circuit,
 		origin=input_gc_pos,
 		num_couplers=num_inputs,
@@ -258,14 +349,20 @@ def generate_SC_circuit(
 		merger = add_interferometer_merger(circuit, origin=merger_pos)
 		merger_outputs.append(merger["output_port"])
 	
-	# 5. Add output grating couplers
-	output_ports = add_output_grating_coupler_array(
+	# 5. Add output grating couplers (returns instance refs)
+	output_gc_refs = add_output_grating_coupler_array(
 		circuit,
 		origin=output_gc_pos,
 		num_couplers=num_outputs,
 		pitch=gc_pitch,
 		orientation="West",
 	)
+
+	# Routing: connect top GC to bottom GC following drawn path
+	try:
+		connect_gc_top_bottom_drawn(circuit, input_gc_refs)
+	except Exception as e:
+		print(f"[WARN] connect_gc_top_bottom_drawn failed: {e}")
 	
 	print(f"[OK] SC Circuit generated with {num_inputs} inputs, {num_outputs} outputs")
 	
@@ -275,53 +372,6 @@ def generate_SC_circuit(
 	
 	return circuit
 
-
-# ============================================================================
-# Legacy Functions (for backward compatibility)
-# ============================================================================
-
-def add_grating_coupler_array_to_subdie(
-	subdie_cell: gf.Component,
-	num_couplers: int = 8,
-	pitch: float = 127.0,
-	orientation: str = "East",
-	start_position: tuple[float, float] = (167.84264, 1148.75036),
-) -> None:
-	"""Add grating couplers to a Sub_Die cell.
-	
-	Args:
-		subdie_cell: The sub-die cell to add couplers to.
-		num_couplers: Number of grating couplers to add.
-		pitch: Spacing between couplers (in um).
-		orientation: Direction of coupler outputs ("North", "South", "East", "West").
-		start_position: Position of the first (top/northmost) coupler (x, y).
-	"""
-	# Create grating coupler component for SiN TE at 1550 nm from UBCPDK
-	gc = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
-	
-	# Map orientation to rotation and spacing direction
-	orientation_map = {
-		"East": {"angle": 0, "dx": 0, "dy": -pitch},      # Vertical spacing, output right
-		"West": {"angle": 180, "dx": 0, "dy": -pitch},    # Vertical spacing, output left
-		"North": {"angle": 90, "dx": pitch, "dy": 0},     # Horizontal spacing, output up
-		"South": {"angle": 270, "dx": pitch, "dy": 0},    # Horizontal spacing, output down
-	}
-	
-	if orientation not in orientation_map:
-		raise ValueError(f"Invalid orientation '{orientation}'. Choose from {list(orientation_map.keys())}")
-	
-	config = orientation_map[orientation]
-	x_start, y_start = start_position
-	
-	# Add grating couplers
-	for i in range(num_couplers):
-		gc_ref = subdie_cell << gc
-		x_pos = x_start + i * config["dx"]
-		y_pos = y_start + i * config["dy"]
-		gc_ref.move((x_pos, y_pos))
-		gc_ref.rotate(config["angle"])
-	
-	print(f"[OK] {num_couplers} grating couplers added to sub-die ({orientation}) with pitch {pitch} um")
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -366,11 +416,14 @@ def build_from_template(
 		# Generate complete SC circuit with relative positioning
 		generate_SC_circuit(
 			parent_cell=subdie_2,
-			origin=(50, 100),  # Absolute position within Sub_Die_2
+			origin=(200, 1170),  # Absolute position within Sub_Die_2
 			num_inputs=8,
-			num_outputs=8,
+			num_outputs=0,
 			gc_pitch=127.0,
 		)
+		# Add another SC circuit instance at different position if needed
+
+
 	else:
 		print("[WARNING] Sub_Die_2 not found")
 
