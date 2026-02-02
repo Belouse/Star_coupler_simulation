@@ -9,3 +9,5 @@ env/
 output/lms
 output/fsp
 build/oas/
+build/mask/
+

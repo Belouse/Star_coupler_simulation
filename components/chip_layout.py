@@ -92,8 +92,8 @@ def add_input_grating_coupler_array(
 def add_star_coupler(
 	circuit: gf.Component,
 	origin: tuple[float, float] = (0, 0),
-	n_inputs: int = 8,
-	n_outputs: int = 8,
+	n_inputs: int = 5,
+	n_outputs: int = 4,
 	**kwargs,
 ) -> dict:
 	"""Add star coupler to circuit.
@@ -344,10 +344,10 @@ def connect_gc_top_bottom_drawn(
 
 
 
-def place_star_coupler_left_of_gcs(
+def place_star_coupler_gcs(
 	star_ref: gf.ComponentReference,
 	gc_refs: list,
-	gap: float = 50.0,
+	gap: float = 0.0,
 ) -> None:
 	"""Place star coupler to the left of the GC array with a fixed gap."""
 	if not gc_refs:
@@ -447,10 +447,10 @@ def generate_SC_circuit(
 	sc_ports = add_star_coupler(
 		circuit,
 		origin=star_coupler_pos,
-		n_inputs=num_inputs,
-		n_outputs=num_outputs,
+		n_inputs=5,
+		n_outputs=4,
 	)
-	place_star_coupler_left_of_gcs(sc_ports["ref"], input_gc_refs, gap=50.0)
+	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-500.0)
 	connect_star_coupler_inputs_to_gcs(
 		circuit,
 		star_ref=sc_ports["ref"],
