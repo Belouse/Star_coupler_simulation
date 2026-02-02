@@ -6,10 +6,15 @@ export to output/gds.
 
 from __future__ import annotations
 from pathlib import Path
+import warnings
 import gdsfactory as gf
 import ubcpdk
 
 from star_coupler import star_coupler
+
+
+# Suppress gdsfactory warnings about width being ignored when a cross_section is provided
+warnings.filterwarnings("ignore", message=".*ignored for cross_section.*")
 
 
 # ============================================================================
@@ -91,7 +96,7 @@ def add_star_coupler(
 	n_outputs: int = 8,
 	**kwargs,
 ) -> dict:
-	"""Add star coupler to circuit (DUMMY - to be implemented).
+	"""Add star coupler to circuit.
 	
 	Args:
 		circuit: The circuit component.
@@ -101,15 +106,25 @@ def add_star_coupler(
 		**kwargs: Additional parameters for star coupler.
 	
 	Returns:
-		Dict with 'input_ports' and 'output_ports' positions.
+		Dict with 'ref', 'input_ports', and 'output_ports'.
 	"""
-	# TODO: Implement actual star coupler using star_coupler() function
-	# For now, return dummy port positions
-	
-	input_ports = [(origin[0], origin[1] + i * 10) for i in range(n_inputs)]
-	output_ports = [(origin[0] + 100, origin[1] + i * 10) for i in range(n_outputs)]
-	
-	return {"input_ports": input_ports, "output_ports": output_ports}
+	star = star_coupler(n_inputs=n_inputs, n_outputs=n_outputs, **kwargs)
+	star_ref = circuit << star
+	star_ref.move(origin)
+
+	input_ports = []
+	for i in range(n_inputs):
+		name = f"i{i + 1}"
+		if name in star_ref.ports:
+			input_ports.append(star_ref.ports[name])
+
+	output_ports = []
+	for i in range(n_outputs):
+		name = f"out{i + 1}"
+		if name in star_ref.ports:
+			output_ports.append(star_ref.ports[name])
+
+	return {"ref": star_ref, "input_ports": input_ports, "output_ports": output_ports}
 
 
 def add_power_splitter(
@@ -329,6 +344,56 @@ def connect_gc_top_bottom_drawn(
 
 
 
+def place_star_coupler_left_of_gcs(
+	star_ref: gf.ComponentReference,
+	gc_refs: list,
+	gap: float = 50.0,
+) -> None:
+	"""Place star coupler to the left of the GC array with a fixed gap."""
+	if not gc_refs:
+		return
+	gc_min_x = min(ref.dbbox().left for ref in gc_refs)
+	gc_center_y = sum(ref.center[1] for ref in gc_refs) / len(gc_refs)
+
+	star_bbox = star_ref.dbbox()
+	star_center_y = (star_bbox.top + star_bbox.bottom) / 2
+	dx = gc_min_x - gap - star_bbox.right
+	dy = gc_center_y - star_center_y
+	star_ref.move((dx, dy))
+
+
+def connect_star_coupler_inputs_to_gcs(
+	circuit: gf.Component,
+	star_ref: gf.ComponentReference,
+	gc_refs: list,
+	start_gc_index: int = 1,
+	bend_radius: float = 40.0,
+) -> None:
+	"""Route star coupler input ports to the GC array starting at IN2.
+
+	Mapping: i1 -> IN2, i2 -> IN3, i3 -> IN4, ...
+	"""
+	cs = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
+
+	input_port_names = [port.name for port in star_ref.ports if port.name.startswith("i")]
+	input_port_names.sort(key=lambda n: int(n[1:]))
+
+	for i, port_name in enumerate(input_port_names):
+		gc_index = i + start_gc_index
+		if gc_index >= len(gc_refs):
+			break
+		gc_port = list(gc_refs[gc_index].ports)[0]
+		sc_port = star_ref.ports[port_name]
+		gf.routing.route_single(
+			circuit,
+			sc_port,
+			gc_port,
+			cross_section=cs,
+			radius=bend_radius,
+			auto_taper=False,
+			allow_width_mismatch=True,
+		)
+
 def generate_SC_circuit(
 	parent_cell: gf.Component,
 	origin: tuple[float, float] = (0, 0),
@@ -364,7 +429,7 @@ def generate_SC_circuit(
 	
 	# Define relative positions within the circuit
 	input_gc_pos = (0, 0)
-	star_coupler_pos = (200, 0)
+	star_coupler_pos = (0, 0)
 	splitter_start_pos = (400, 0)
 	merger_start_pos = (600, 0)
 	output_gc_pos = (800, 0)
@@ -378,12 +443,20 @@ def generate_SC_circuit(
 		orientation="East",
 	)
 	
-	# 2. Add star coupler
+	# 2. Add star coupler (placed left of input GC array)
 	sc_ports = add_star_coupler(
 		circuit,
 		origin=star_coupler_pos,
 		n_inputs=num_inputs,
 		n_outputs=num_outputs,
+	)
+	place_star_coupler_left_of_gcs(sc_ports["ref"], input_gc_refs, gap=50.0)
+	connect_star_coupler_inputs_to_gcs(
+		circuit,
+		star_ref=sc_ports["ref"],
+		gc_refs=input_gc_refs,
+		start_gc_index=1,
+		bend_radius=40.0,
 	)
 	
 	# 3. Add power splitters (one per output channel)

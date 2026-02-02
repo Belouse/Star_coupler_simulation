@@ -283,14 +283,12 @@ def star_coupler(
 
     # Build ports_info dictionary from the ports we've added
     ports_info = {}
-    for port_name in ['i1', 'i2', 'i3', "i4", "i5", 'e1', 'e2', 'e3', 'e4']:
-        if port_name in c.ports:
-            port = c.ports[port_name]
-            ports_info[port_name] = {
-                'center': (float(port.center[0]), float(port.center[1])),
-                'width': port.width,
-                'orientation': port.orientation
-            }
+    for port in c.ports:
+        ports_info[port.name] = {
+            'center': (float(port.center[0]), float(port.center[1])),
+            'width': port.width,
+            'orientation': port.orientation
+        }
 
     # --- 5. Add Input Straight Waveguides (at input ports) ---
     # Calculate the minimum x position to make all input waveguides end at the same location
