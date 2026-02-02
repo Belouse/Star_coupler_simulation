@@ -13,6 +13,7 @@ from star_coupler import star_coupler
 
 
 def add_grating_coupler_array_to_subdie(
+	chip: gf.Component,
 	ref: gf.ComponentReference,
 	subdie_name: str = "Sub_Die_2",
 	num_couplers: int = 8,
@@ -20,35 +21,25 @@ def add_grating_coupler_array_to_subdie(
 ) -> None:
 	"""Add a line of grating couplers inside Sub_Die_2.
 	
-	The grating couplers are arranged in a line with outputs facing right (0°).
+	The grating couplers are arranged in a line with outputs facing right (0 degrees).
 	"""
-	# Get the Sub_Die_2 cell from the reference
-	subdie_cell = None
-	for cell_name, cell in ref.get_dependencies():
-		if subdie_name in cell_name:
-			subdie_cell = cell
-			break
-	
-	if subdie_cell is None:
-		raise ValueError(f"Could not find {subdie_name} in template")
-	
-	# Get bounds of Sub_Die_2 to position the grating couplers
-	bb = subdie_cell.bbox()
-	if bb is None:
-		bb = ((0, 0), (100, 100))  # fallback
-	
-	x_start = bb[0][0] + 10  # Offset from left edge
-	y_center = (bb[0][1] + bb[1][1]) / 2  # Center vertically
-	
+	# For now, just add grating couplers to the chip at simple positions
 	# Create grating coupler component with output facing right (0 degrees)
 	gc = gf.components.grating_coupler_elliptical_te()
 	
+	# Base position for the grating coupler array
+	x_start = 3200  # Starting position in um
+	y_start = 6200  # Starting position in um
+	
 	# Add grating couplers in a line
 	for i in range(num_couplers):
-		gc_ref = subdie_cell << gc
+		gc_ref = chip << gc
 		x_pos = x_start + i * pitch
-		gc_ref.move((x_pos, y_center))
+		y_pos = y_start
+		gc_ref.move((x_pos, y_pos))
 		gc_ref.rotate(0)  # Output facing right
+	
+	print(f"[OK] {num_couplers} grating couplers added to {subdie_name}")
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -79,7 +70,7 @@ def build_from_template(
 	# ref.move((chip_origin[0] - ref.xmin, chip_origin[1] - ref.ymin))
 
 	# Access Sub_Die_2 and add grating couplers to it
-	add_grating_coupler_array_to_subdie(ref, subdie_name="Sub_Die_2", num_couplers=8)
+	add_grating_coupler_array_to_subdie(chip, ref, subdie_name="Sub_Die_2", num_couplers=8)
 
 	return chip
 
