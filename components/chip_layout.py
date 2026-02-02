@@ -371,19 +371,18 @@ def connect_star_coupler_inputs_to_gcs(
 ) -> None:
 	"""Route star coupler input ports to the GC array starting at IN2.
 
-	Mapping: i1 -> IN2, i2 -> IN3, i3 -> IN4, ...
+	Mapping: top star port -> IN2, bottom star port -> IN6 (top-to-bottom order).
 	"""
 	cs = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
 
-	input_port_names = [port.name for port in star_ref.ports if port.name.startswith("i")]
-	input_port_names.sort(key=lambda n: int(n[1:]))
+	input_ports = [port for port in star_ref.ports if port.name.startswith("i")]
+	input_ports.sort(key=lambda p: p.center[1], reverse=True)
 
-	for i, port_name in enumerate(input_port_names):
-		gc_index = i + start_gc_index
+	for i, sc_port in enumerate(input_ports):
+		gc_index = start_gc_index + i
 		if gc_index >= len(gc_refs):
 			break
 		gc_port = list(gc_refs[gc_index].ports)[0]
-		sc_port = star_ref.ports[port_name]
 		gf.routing.route_single(
 			circuit,
 			sc_port,
