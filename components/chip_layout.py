@@ -237,7 +237,7 @@ def connect_gc_top_bottom_drawn(
 	gc_refs: list,
 	front_dx: float = 0.0,
 	first_drop: float = 20.0,
-	back_offset: float = 25.0,
+	back_offset: float = 5.0,
 	bottom_rise: float = 0.0,
 	bottom_dx1: float = 30.0,
 	bottom_dx2: float = 30.0,
@@ -274,8 +274,8 @@ def connect_gc_top_bottom_drawn(
 
 	# Build explicit SiN waveguide segments with Euler bends
 	cs = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
-	bend_r = gf.components.bend_euler(angle=-90, cross_section=cs)
-	bend_l = gf.components.bend_euler(angle=90, cross_section=cs)
+	bend_r = gf.components.bend_euler(angle=-90, cross_section=cs, radius=30.0)
+	bend_l = gf.components.bend_euler(angle=90, cross_section=cs, radius=30.0)
 
 	def place_chain(start_port, elements):
 		current_port = start_port
@@ -323,7 +323,7 @@ def connect_gc_top_bottom_drawn(
 	cur = place_chain(cur, [bend_l])
 
 	# Backbone vertical straight from top to bottom anchor
-	backbone_len = abs(cur.y - y_mid - 45)
+	backbone_len = abs(cur.y - y_mid - 135)
 	backbone = circuit << gf.components.straight(length=max(1, backbone_len), cross_section=cs)
 	backbone.rotate(90)
 	backbone.connect("o1", cur)
@@ -367,7 +367,7 @@ def connect_star_coupler_inputs_to_gcs(
 	star_ref: gf.ComponentReference,
 	gc_refs: list,
 	start_gc_index: int = 1,
-	bend_radius: float = 40.0,
+	bend_radius: float = 60.0,
 ) -> None:
 	"""Route star coupler input ports to the GC array starting at IN2.
 
@@ -432,6 +432,7 @@ def connect_star_coupler_inputs_to_gcs(
 		cs = gf.cross_section.cross_section(
 			layer=input_ports[0].layer,
 			width=target_width,
+			radius=bend_radius,
 		)
 		input_ports_norm = [
 			_flip_port_orientation(
@@ -452,13 +453,31 @@ def connect_star_coupler_inputs_to_gcs(
 		input_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 		gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
-		gf.routing.route_bundle_sbend(
-			circuit,
-			gc_ports_norm,
-			input_ports_norm,
-			enforce_port_ordering=True,
-			cross_section=cs,
-		)
+		# Use S-bend only for i3/i4 (indices 2 and 3 in top-to-bottom order)
+		sbend_indices = {2, 3}
+		bundle_in = [p for i, p in enumerate(input_ports_norm) if i not in sbend_indices]
+		bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
+		sbend_in = [p for i, p in enumerate(input_ports_norm) if i in sbend_indices]
+		sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in sbend_indices]
+
+		if bundle_in and bundle_gc:
+			gf.routing.route_bundle(
+				circuit,
+				bundle_gc,
+				bundle_in,
+				cross_section=cs,
+				radius=bend_radius,
+				sort_ports=False,
+			)
+
+		if sbend_in and sbend_gc:
+			gf.routing.route_bundle_sbend(
+				circuit,
+				sbend_gc,
+				sbend_in,
+				enforce_port_ordering=True,
+				cross_section=cs,
+			)
 
 def generate_SC_circuit(
 	parent_cell: gf.Component,
@@ -516,13 +535,13 @@ def generate_SC_circuit(
 		n_inputs=5,
 		n_outputs=4,
 	)
-	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-500.0)
+	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-450.0)
 	connect_star_coupler_inputs_to_gcs(
 		circuit,
 		star_ref=sc_ports["ref"],
 		gc_refs=input_gc_refs,
 		start_gc_index=1,
-		bend_radius=40.0,
+		bend_radius=50.0,
 	)
 	
 	# 3. Add power splitters (one per output channel)
