@@ -108,7 +108,7 @@ def add_star_coupler(
 	Returns:
 		Dict with 'ref', 'input_ports', and 'output_ports'.
 	"""
-	star = star_coupler(n_inputs=n_inputs, n_outputs=n_outputs, **kwargs)
+	star = star_coupler(n_inputs=n_inputs, n_outputs=n_outputs, layer=SIN_LAYER, **kwargs)
 	star_ref = circuit << star
 	star_ref.move(origin)
 
@@ -373,24 +373,82 @@ def connect_star_coupler_inputs_to_gcs(
 
 	Mapping: top star port -> IN2, bottom star port -> IN6 (top-to-bottom order).
 	"""
-	cs = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
-
 	input_ports = [port for port in star_ref.ports if port.name.startswith("i")]
 	input_ports.sort(key=lambda p: p.center[1], reverse=True)
 
-	for i, sc_port in enumerate(input_ports):
+	gc_ports = []
+	for i in range(len(input_ports)):
 		gc_index = start_gc_index + i
 		if gc_index >= len(gc_refs):
 			break
-		gc_port = list(gc_refs[gc_index].ports)[0]
-		gf.routing.route_single(
+		gc_ports.append(list(gc_refs[gc_index].ports)[0])
+
+	def _normalize_port_width(port: gf.Port, target_width: float, length: float = 10.0) -> gf.Port:
+		"""Insert a taper if needed so the returned port has target_width."""
+		if abs(port.width - target_width) < 1e-6:
+			return port
+		taper = gf.components.taper(
+			length=length,
+			width1=port.width,
+			width2=target_width,
+			layer=port.layer,
+		)
+		ref = circuit << taper
+		ref.connect("o1", port)
+		return ref.ports["o2"]
+
+	def _flip_port_orientation(port: gf.Port, target_orientation: int, length: float = 20.0) -> gf.Port:
+		"""Returns a new port with target orientation by inserting a short straight."""
+		if port.orientation == target_orientation:
+			return port
+		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
+		straight = gf.components.straight(length=length, cross_section=cs_port)
+		ref = circuit << straight
+		if target_orientation == 0:
+			ref.connect("o2", port)
+			return ref.ports["o1"]
+		if target_orientation == 180:
+			ref.connect("o1", port)
+			return ref.ports["o2"]
+		return port
+
+	if input_ports and gc_ports:
+		count = min(len(input_ports), len(gc_ports))
+		input_ports = input_ports[:count]
+		gc_ports = gc_ports[:count]
+
+		# Normalize widths and orientations for S-bend routing (expects same orientation)
+		target_orientation = int(gc_ports[0].orientation)
+		target_width = min([p.width for p in (input_ports + gc_ports)])
+		cs = gf.cross_section.cross_section(
+			layer=input_ports[0].layer,
+			width=target_width,
+		)
+		input_ports_norm = [
+			_flip_port_orientation(
+				_normalize_port_width(port, target_width),
+				target_orientation,
+			)
+			for port in input_ports
+		]
+		gc_ports_norm = [
+			_flip_port_orientation(
+				_normalize_port_width(port, target_width),
+				target_orientation,
+			)
+			for port in gc_ports
+		]
+
+		# Keep a deterministic top-to-bottom pairing
+		input_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
+		gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
+
+		gf.routing.route_bundle_sbend(
 			circuit,
-			sc_port,
-			gc_port,
+			gc_ports_norm,
+			input_ports_norm,
+			enforce_port_ordering=True,
 			cross_section=cs,
-			radius=bend_radius,
-			auto_taper=False,
-			allow_width_mismatch=True,
 		)
 
 def generate_SC_circuit(
@@ -449,7 +507,7 @@ def generate_SC_circuit(
 		n_inputs=5,
 		n_outputs=4,
 	)
-	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-600.0)
+	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-500.0)
 	connect_star_coupler_inputs_to_gcs(
 		circuit,
 		star_ref=sc_ports["ref"],
@@ -503,8 +561,8 @@ OUTPUT_DIR = ROOT_DIR / "output" / "gds"
 # Target lower-left origin for the chip (in um)
 CHIP_ORIGIN = (3143.33023, 6156.66426)
 
-# SiN waveguide layer (SiePIC 4/0)
-SIN_LAYER = (4, 0)
+# Waveguide layer from UBC PDK
+SIN_LAYER = ubcpdk.LAYER.WG
 
 
 def find_subdie_cell(cell: gf.Component, target_name: str) -> gf.Component | None:
