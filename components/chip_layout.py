@@ -191,7 +191,7 @@ def connect_gc_top_bottom_drawn(
 	front_dx: float = 20.0,
 	first_drop: float = 20.0,
 	back_offset: float = 40.0,
-	bottom_rise: float = 20.0,
+	bottom_rise: float = 0.0,
 	bottom_dx1: float = 30.0,
 	bottom_dx2: float = 30.0,
 	end_dx: float = 0.0,
@@ -228,8 +228,7 @@ def connect_gc_top_bottom_drawn(
 	x_b2 = p_bottom.x - end_dx - bottom_dx1
 
 	# Build explicit SiN waveguide segments with Euler bends
-	# Force WG2 layer (SiN) to ensure correct material
-	cs = gf.cross_section.cross_section(layer=ubcpdk.LAYER.WG2, width=0.75)
+	cs = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
 	bend_r = gf.components.bend_euler(angle=-90, cross_section=cs)
 	bend_l = gf.components.bend_euler(angle=90, cross_section=cs)
 
@@ -245,7 +244,7 @@ def connect_gc_top_bottom_drawn(
 		return current_port
 
 	def place_start_straight_at(port, length: float = 5.0):
-		"""Place a short WG2 straight with its o1 aligned to a given port position."""
+		"""Place a short SiN straight with its o1 aligned to a given port position."""
 		straight = gf.components.straight(length=length, cross_section=cs)
 		ref = circuit << straight
 		# rotate to match port orientation, then move so o1 aligns to port center
@@ -258,24 +257,38 @@ def connect_gc_top_bottom_drawn(
 		ref.move((dx, dy))
 		return ref.ports["o2"]
 
-	# Top segment: small WG2 straight -> right bend -> right bend -> straight to backbone top
-	cur = place_start_straight_at(p_top, length=10)
+	def place_start_taper_at(port, length: float = 20.0):
+		"""Place a short SiN taper with its o1 aligned to a given port position."""
+		taper = gf.components.taper(length=length, width1=0.75, width2=0.75, cross_section=cs)
+		ref = circuit << taper
+		try:
+			ref.rotate(port.orientation, center=(0, 0))
+		except Exception:
+			pass
+		dx = port.center[0] - ref.ports["o1"].center[0]
+		dy = port.center[1] - ref.ports["o1"].center[1]
+		ref.move((dx, dy))
+		return ref.ports["o2"]
+
+	# Top segment: taper -> right bend -> right bend -> straight -> right bend (down) to backbone
+	cur = place_start_taper_at(p_top, length=20)
 	cur = place_chain(cur, [gf.components.straight(length=front_dx, cross_section=cs)])
 	cur = place_chain(cur, [bend_r])
 	cur = place_chain(cur, [gf.components.straight(length=first_drop, cross_section=cs)])
 	cur = place_chain(cur, [bend_r])
 	straight_len = max(10, cur.x - x_back)
 	cur = place_chain(cur, [gf.components.straight(length=straight_len, cross_section=cs)])
+	cur = place_chain(cur, [bend_l])
 
 	# Backbone vertical straight from top to bottom anchor
-	backbone_len = max(10, cur.y - y_mid)
-	backbone = circuit << gf.components.straight(length=backbone_len, cross_section=cs)
+	backbone_len = abs(cur.y - y_mid - 45)
+	backbone = circuit << gf.components.straight(length=max(1, backbone_len), cross_section=cs)
 	backbone.rotate(90)
 	backbone.connect("o1", cur)
 	backbone_bottom = backbone.ports["o2"]
 
-	# Bottom segment: small WG2 straight -> left bend -> left bend -> straight -> right bend into backbone
-	cur_b = place_start_straight_at(p_bottom, length=10)
+	# Bottom segment: taper -> left bend -> left bend -> straight -> right bend into backbone
+	cur_b = place_start_taper_at(p_bottom, length=20)
 	cur_b = place_chain(cur_b, [bend_l])
 	cur_b = place_chain(cur_b, [gf.components.straight(length=bottom_rise, cross_section=cs)])
 	cur_b = place_chain(cur_b, [bend_l])
@@ -283,8 +296,9 @@ def connect_gc_top_bottom_drawn(
 	cur_b = place_chain(cur_b, [gf.components.straight(length=straight_len_b, cross_section=cs)])
 	cur_b = place_chain(cur_b, [bend_r])
 	# Connect to backbone bottom by a short straight if needed
-	join_len = max(10, cur_b.y - backbone_bottom.y)
-	cur_b = place_chain(cur_b, [gf.components.straight(length=join_len, cross_section=cs)])
+	join_len = abs(backbone_bottom.y - cur_b.y)
+	if join_len > 0:
+		cur_b = place_chain(cur_b, [gf.components.straight(length=max(1, join_len), cross_section=cs)])
 
 	print(f"[OK] Drew top->bottom GC with Euler bends + taper, back x={x_back}")
 
@@ -392,6 +406,9 @@ OUTPUT_DIR = ROOT_DIR / "output" / "gds"
 
 # Target lower-left origin for the chip (in um)
 CHIP_ORIGIN = (3143.33023, 6156.66426)
+
+# SiN waveguide layer (SiePIC 4/0)
+SIN_LAYER = (4, 0)
 
 
 def find_subdie_cell(cell: gf.Component, target_name: str) -> gf.Component | None:
