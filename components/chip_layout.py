@@ -227,8 +227,9 @@ def connect_gc_top_bottom_drawn(
 	x_b1 = p_bottom.x - end_dx - bottom_dx1 - bottom_dx2
 	x_b2 = p_bottom.x - end_dx - bottom_dx1
 
-	# Build explicit SiN waveguide segments with Euler bends and taper
-	cs = ubcpdk.PDK.cross_sections["strip"]
+	# Build explicit SiN waveguide segments with Euler bends
+	# Force WG2 layer (SiN) to ensure correct material
+	cs = gf.cross_section.cross_section(layer=ubcpdk.LAYER.WG2, width=0.75)
 	bend_r = gf.components.bend_euler(angle=-90, cross_section=cs)
 	bend_l = gf.components.bend_euler(angle=90, cross_section=cs)
 
@@ -243,10 +244,22 @@ def connect_gc_top_bottom_drawn(
 			current_port = ref.ports["o2"]
 		return current_port
 
-	# Top segment: taper -> right bend -> right bend -> straight to backbone top
-	# Taper from GC width to waveguide width
-	taper_top = gf.components.taper(length=20, width1=0.75, width2=0.5, cross_section=cs)
-	cur = place_chain(p_top, [taper_top])
+	def place_start_straight_at(port, length: float = 5.0):
+		"""Place a short WG2 straight with its o1 aligned to a given port position."""
+		straight = gf.components.straight(length=length, cross_section=cs)
+		ref = circuit << straight
+		# rotate to match port orientation, then move so o1 aligns to port center
+		try:
+			ref.rotate(port.orientation, center=(0, 0))
+		except Exception:
+			pass
+		dx = port.center[0] - ref.ports["o1"].center[0]
+		dy = port.center[1] - ref.ports["o1"].center[1]
+		ref.move((dx, dy))
+		return ref.ports["o2"]
+
+	# Top segment: small WG2 straight -> right bend -> right bend -> straight to backbone top
+	cur = place_start_straight_at(p_top, length=10)
 	cur = place_chain(cur, [gf.components.straight(length=front_dx, cross_section=cs)])
 	cur = place_chain(cur, [bend_r])
 	cur = place_chain(cur, [gf.components.straight(length=first_drop, cross_section=cs)])
@@ -261,9 +274,8 @@ def connect_gc_top_bottom_drawn(
 	backbone.connect("o1", cur)
 	backbone_bottom = backbone.ports["o2"]
 
-	# Bottom segment: taper -> left bend -> left bend -> straight -> right bend into backbone
-	taper_bot = gf.components.taper(length=20, width1=0.75, width2=0.5, cross_section=cs)
-	cur_b = place_chain(p_bottom, [taper_bot])
+	# Bottom segment: small WG2 straight -> left bend -> left bend -> straight -> right bend into backbone
+	cur_b = place_start_straight_at(p_bottom, length=10)
 	cur_b = place_chain(cur_b, [bend_l])
 	cur_b = place_chain(cur_b, [gf.components.straight(length=bottom_rise, cross_section=cs)])
 	cur_b = place_chain(cur_b, [bend_l])
