@@ -17,29 +17,59 @@ def add_grating_coupler_array_to_subdie(
 	ref: gf.ComponentReference,
 	subdie_name: str = "Sub_Die_2",
 	num_couplers: int = 8,
-	pitch: float = 20.0,
+	pitch: float = 127.0,
 ) -> None:
-	"""Add a line of grating couplers inside Sub_Die_2.
+	"""Add a vertical line of grating couplers inside Sub_Die_2.
 	
-	The grating couplers are arranged in a line with outputs facing right (0 degrees).
+	The grating couplers are arranged vertically with outputs facing right (0 degrees).
+	Spacing between couplers: 127 um.
 	"""
-	# For now, just add grating couplers to the chip at simple positions
+	# Get the template cell
+	template_cell = ref.cell
+	
+	# Search for Sub_Die_2 in nested instances
+	def find_subdie(cell, target_name):
+		for inst in cell.insts:
+			if target_name in inst.cell.name:
+				return inst.cell  # Return the cell, not the instance
+			result = find_subdie(inst.cell, target_name)
+			if result:
+				return result
+		return None
+	
+	subdie_cell = find_subdie(template_cell, subdie_name)
+	
+	if subdie_cell is None:
+		print("Available Sub_Die cells:")
+		def list_cells(cell, prefix=""):
+			for inst in cell.insts:
+				if "Sub_Die" in inst.cell.name:
+					print(f"  {prefix}{inst.cell.name}")
+				list_cells(inst.cell, prefix + "  ")
+		list_cells(template_cell)
+		return
+	
+	# Get bounds of Sub_Die_2
+	bb = subdie_cell.bbox()
+	if bb is None:
+		print(f"[WARNING] No bounding box for {subdie_name}")
+		return
+	
+	# Position the grating couplers vertically in the center horizontally
+	x_pos = (bb.left + bb.right) / 2  # Center horizontally
+	y_start = bb.bottom + 20  # Offset from bottom
+	
 	# Create grating coupler component with output facing right (0 degrees)
 	gc = gf.components.grating_coupler_elliptical_te()
 	
-	# Base position for the grating coupler array
-	x_start = 3200  # Starting position in um
-	y_start = 6200  # Starting position in um
-	
-	# Add grating couplers in a line
+	# Add grating couplers vertically inside Sub_Die_2
 	for i in range(num_couplers):
-		gc_ref = chip << gc
-		x_pos = x_start + i * pitch
-		y_pos = y_start
+		gc_ref = subdie_cell << gc
+		y_pos = y_start + i * pitch  # Vertical spacing of 127 um
 		gc_ref.move((x_pos, y_pos))
 		gc_ref.rotate(0)  # Output facing right
 	
-	print(f"[OK] {num_couplers} grating couplers added to {subdie_name}")
+	print(f"[OK] {num_couplers} grating couplers added vertically to {subdie_name} with pitch {pitch} um")
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
