@@ -449,7 +449,7 @@ def generate_SC_circuit(
 		n_inputs=5,
 		n_outputs=4,
 	)
-	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-500.0)
+	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-600.0)
 	connect_star_coupler_inputs_to_gcs(
 		circuit,
 		star_ref=sc_ports["ref"],
