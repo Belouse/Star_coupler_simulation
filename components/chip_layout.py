@@ -7,7 +7,6 @@ export to output/gds.
 from __future__ import annotations
 from pathlib import Path
 import gdsfactory as gf
-import sys
 import ubcpdk
 
 from star_coupler import star_coupler
@@ -17,12 +16,27 @@ from star_coupler import star_coupler
 # Component Generation Functions (Relative positioning within circuit)
 # ============================================================================
 
+def add_port_label(
+	circuit: gf.Component,
+	text: str,
+	position: tuple[float, float],
+	size: float = 8.0,
+	layer: tuple[int, int] = ubcpdk.LAYER.TEXT,
+) -> None:
+	"""Add engraved text label on the chip."""
+	label = gf.components.text(text=text, size=size, layer=layer)
+	label_ref = circuit << label
+	label_ref.move(position)
+
 def add_input_grating_coupler_array(
 	circuit: gf.Component,
 	origin: tuple[float, float] = (0, 0),
 	num_couplers: int = 8,
 	pitch: float = 127.0,
 	orientation: str = "East",
+	label_prefix: str | None = "IN",
+	label_offset: tuple[float, float] = (25.0, 5.0),
+	label_size: float = 8.0,
 ) -> list:
 	"""Add input grating coupler array to circuit.
 	
@@ -58,6 +72,15 @@ def add_input_grating_coupler_array(
 		# Store instance reference for later routing
 		gc_refs.append(gc_ref)
 
+		# Add engraved label near port
+		if label_prefix:
+			add_port_label(
+				circuit,
+				text=f"{label_prefix}{i + 1}",
+				position=(gc_ref.center[0] + label_offset[0], gc_ref.center[1] + label_offset[1]),
+				size=label_size,
+			)
+
 	return gc_refs
 
 
@@ -82,7 +105,6 @@ def add_star_coupler(
 	"""
 	# TODO: Implement actual star coupler using star_coupler() function
 	# For now, return dummy port positions
-	print(f"[DUMMY] Star coupler at {origin} with {n_inputs} inputs, {n_outputs} outputs")
 	
 	input_ports = [(origin[0], origin[1] + i * 10) for i in range(n_inputs)]
 	output_ports = [(origin[0] + 100, origin[1] + i * 10) for i in range(n_outputs)]
@@ -106,7 +128,6 @@ def add_power_splitter(
 		Dict with 'input_port' and 'output_ports' positions.
 	"""
 	# TODO: Implement actual 2x1 MMI or Y-branch
-	print(f"[DUMMY] Power splitter (1x2) at {origin}")
 	
 	return {
 		"input_port": (origin[0], origin[1]),
@@ -131,7 +152,6 @@ def add_interferometer_merger(
 		Dict with 'input_ports' and 'output_port' positions.
 	"""
 	# TODO: Implement actual 2x1 combiner/interferometer
-	print(f"[DUMMY] Interferometer merger (2x1) at {origin}")
 	
 	return {
 		"input_ports": [
@@ -148,6 +168,9 @@ def add_output_grating_coupler_array(
 	num_couplers: int = 8,
 	pitch: float = 127.0,
 	orientation: str = "West",
+	label_prefix: str | None = "OUT",
+	label_offset: tuple[float, float] = (-35.0, 0.0),
+	label_size: float = 8.0,
 ) -> list:
 	"""Add output grating coupler array to circuit.
 	
@@ -182,15 +205,24 @@ def add_output_grating_coupler_array(
 
 		gc_refs.append(gc_ref)
 
+		# Add engraved label near port
+		if label_prefix:
+			add_port_label(
+				circuit,
+				text=f"{label_prefix}{i + 1}",
+				position=(gc_ref.center[0] + label_offset[0], gc_ref.center[1] + label_offset[1]),
+				size=label_size,
+			)
+
 	return gc_refs
 
 
 def connect_gc_top_bottom_drawn(
 	circuit: gf.Component,
 	gc_refs: list,
-	front_dx: float = 20.0,
+	front_dx: float = 0.0,
 	first_drop: float = 20.0,
-	back_offset: float = 40.0,
+	back_offset: float = 25.0,
 	bottom_rise: float = 0.0,
 	bottom_dx1: float = 30.0,
 	bottom_dx2: float = 30.0,
@@ -224,16 +256,11 @@ def connect_gc_top_bottom_drawn(
 	# Bottom logic (reverse of user description):
 	# backbone -> right -> down -> right -> down -> into GC
 	y_mid = y_bottom + bottom_rise
-	x_b1 = p_bottom.x - end_dx - bottom_dx1 - bottom_dx2
-	x_b2 = p_bottom.x - end_dx - bottom_dx1
 
 	# Build explicit SiN waveguide segments with Euler bends
 	cs = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
 	bend_r = gf.components.bend_euler(angle=-90, cross_section=cs)
 	bend_l = gf.components.bend_euler(angle=90, cross_section=cs)
-
-	def add_straight(length: float) -> gf.ComponentReference:
-		return circuit << gf.components.straight(length=length, cross_section=cs)
 
 	def place_chain(start_port, elements):
 		current_port = start_port
@@ -259,7 +286,7 @@ def connect_gc_top_bottom_drawn(
 
 	def place_start_taper_at(port, length: float = 20.0):
 		"""Place a short SiN taper with its o1 aligned to a given port position."""
-		taper = gf.components.taper(length=length, width1=0.75, width2=0.75, cross_section=cs)
+		taper = gf.components.taper(length=length, width1=0.75, width2=0.75, layer=SIN_LAYER)
 		ref = circuit << taper
 		try:
 			ref.rotate(port.orientation, center=(0, 0))
@@ -300,7 +327,6 @@ def connect_gc_top_bottom_drawn(
 	if join_len > 0:
 		cur_b = place_chain(cur_b, [gf.components.straight(length=max(1, join_len), cross_section=cs)])
 
-	print(f"[OK] Drew top->bottom GC with Euler bends + taper, back x={x_back}")
 
 
 def generate_SC_circuit(
@@ -332,7 +358,6 @@ def generate_SC_circuit(
 	Returns:
 		The circuit component.
 	"""
-	print(f"\n=== Generating SC Circuit at origin {origin} ===")
 	
 	# Create circuit sub-component with relative coordinates
 	circuit = gf.Component(f"SC_circuit_{int(origin[0])}_{int(origin[1])}")
@@ -390,7 +415,6 @@ def generate_SC_circuit(
 	except Exception as e:
 		print(f"[WARN] connect_gc_top_bottom_drawn failed: {e}")
 	
-	print(f"[OK] SC Circuit generated with {num_inputs} inputs, {num_outputs} outputs")
 	
 	# Add circuit to parent cell at absolute origin position
 	circuit_ref = parent_cell << circuit
