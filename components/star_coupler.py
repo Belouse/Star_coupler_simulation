@@ -165,7 +165,7 @@ def star_coupler(
     layer: Tuple[int, int] = (4, 0),
     npoints: int = 361,
     taper_overlap: float = 0.2,
-    clad_layer: Optional[Tuple[int, int]] = (111, 0),
+    clad_layer: Optional[Tuple[int, int]] = None,
     clad_offset: float = 3.0,
     input_wg_length: float = 10.0,
     output_wg_length: float = 10.0,
