@@ -461,7 +461,7 @@ def connect_star_coupler_inputs_to_gcs(
 		input_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 		gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
-		# Use S-bend only for i3/i4 (indices 2 and 3 in top-to-bottom order)
+		# Use S-bend only for i3/i4 (indices 2 and 3 in top-to-bottom order) for SC input ports
 		sbend_indices = {2, 3}
 		bundle_in = [p for i, p in enumerate(input_ports_norm) if i not in sbend_indices]
 		bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
@@ -500,8 +500,84 @@ def _route_outputs_power_mode(
 
 	TODO: Implement direct routing from star outputs to GC ports.
 	"""
-	# TODO: Replace with real routing (route_bundle / route_single)
-	_ = (circuit, star_ref, output_gc_refs)
+	# TODO: Replace with production routing constraints if needed
+	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
+	if not output_ports or not output_gc_refs:
+		return
+
+	output_ports.sort(key=lambda p: p.center[1], reverse=True)
+	gc_ports = [list(ref.ports)[0] for ref in output_gc_refs]
+	gc_ports.sort(key=lambda p: p.center[1], reverse=True)
+
+	count = min(len(output_ports), len(gc_ports))
+	output_ports = output_ports[:count]
+	gc_ports = gc_ports[:count]
+
+	def _normalize_port_width(port: gf.Port, target_width: float, length: float = 10.0) -> gf.Port:
+		"""Insert a taper if needed so the returned port has target_width."""
+		if abs(port.width - target_width) < 1e-6:
+			return port
+		taper = gf.components.taper(
+			length=length,
+			width1=port.width,
+			width2=target_width,
+			layer=port.layer,
+		)
+		ref = circuit << taper
+		ref.connect("o1", port)
+		return ref.ports["o2"]
+
+	def _flip_port_orientation(port: gf.Port, target_orientation: int, length: float = 20.0) -> gf.Port:
+		"""Returns a new port with target orientation by inserting a short straight."""
+		if port.orientation == target_orientation:
+			return port
+		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
+		straight = gf.components.straight(length=length, cross_section=cs_port)
+		ref = circuit << straight
+		if target_orientation == 0:
+			ref.connect("o2", port)
+			return ref.ports["o1"]
+		if target_orientation == 180:
+			ref.connect("o1", port)
+			return ref.ports["o2"]
+		return port
+
+	# Normalize widths and orientations for routing
+	target_orientation = int(gc_ports[0].orientation)
+	target_width = min([p.width for p in (output_ports + gc_ports)])
+	cs = gf.cross_section.cross_section(
+		layer=output_ports[0].layer,
+		width=target_width,
+		radius=50.0,
+	)
+	output_ports_norm = [
+		_flip_port_orientation(
+			_normalize_port_width(port, target_width),
+			target_orientation,
+		)
+		for port in output_ports
+	]
+	gc_ports_norm = [
+		_flip_port_orientation(
+			_normalize_port_width(port, target_width),
+			target_orientation,
+		)
+		for port in gc_ports
+	]
+
+	output_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
+	gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
+
+	gf.routing.route_bundle(
+		circuit,
+		gc_ports_norm,
+		output_ports_norm,
+		cross_section=cs,
+		radius=50.0,
+		sort_ports=False,
+		separation=10.0,
+		auto_taper=False,
+	)
 
 
 def _route_outputs_amplitude_same_length_mode(
@@ -605,7 +681,7 @@ def generate_SC_circuit(
 		orientation="West",
 	)
 
-	# 4. Feature-specific output routing (dummy for now)
+	# 4. Feature-specific output routing
 	mode = feature_mode.lower()
 	if mode == "power":
 		_route_outputs_power_mode(circuit, sc_ports["ref"], output_gc_refs)
