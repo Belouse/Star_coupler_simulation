@@ -491,12 +491,52 @@ def connect_star_coupler_inputs_to_gcs(
 				cross_section=cs,
 			)
 
+def _route_outputs_power_mode(
+	circuit: gf.Component,
+	star_ref: gf.ComponentReference,
+	output_gc_refs: list,
+) -> None:
+	"""Route star coupler outputs directly to GC array (power mode).
+
+	TODO: Implement direct routing from star outputs to GC ports.
+	"""
+	# TODO: Replace with real routing (route_bundle / route_single)
+	_ = (circuit, star_ref, output_gc_refs)
+
+
+def _route_outputs_amplitude_same_length_mode(
+	circuit: gf.Component,
+	star_ref: gf.ComponentReference,
+	output_gc_refs: list,
+) -> None:
+	"""Route star coupler outputs to GC array with equal path length.
+
+	TODO: Implement equal-length routing from star outputs to GC ports.
+	"""
+	# TODO: Add length-matching serpentine or path-equalization routing
+	_ = (circuit, star_ref, output_gc_refs)
+
+
+def _route_outputs_phase_mode(
+	circuit: gf.Component,
+	star_ref: gf.ComponentReference,
+) -> None:
+	"""Interfere star coupler outputs pairwise (phase mode).
+
+	Pairs: 1vs2, 2vs3, 3vs4.
+	TODO: Implement interferometer/combiner routing for these pairs.
+	"""
+	# TODO: Insert interferometers (1vs2, 2vs3, 3vs4)
+	_ = (circuit, star_ref)
+
+
 def generate_SC_circuit(
 	parent_cell: gf.Component,
 	origin: tuple[float, float] = (0, 0),
 	num_inputs: int = 8,
-	num_outputs: int = 0,
+	num_outputs: int = 4,
 	gc_pitch: float = 127.0,
+	feature_mode: str = "power",
 ) -> gf.Component:
 	"""Generate complete Star Coupler circuit with all components.
 	
@@ -556,21 +596,7 @@ def generate_SC_circuit(
 		bend_radius=50.0,
 	)
 	
-	# 3. Add power splitters (one per output channel)
-	splitter_outputs = []
-	for i in range(num_outputs):
-		splitter_pos = (splitter_start_pos[0], splitter_start_pos[1] + i * 50)
-		splitter = add_power_splitter(circuit, origin=splitter_pos)
-		splitter_outputs.extend(splitter["output_ports"])
-	
-	# 4. Add interferometer mergers
-	merger_outputs = []
-	for i in range(num_outputs):
-		merger_pos = (merger_start_pos[0], merger_start_pos[1] + i * 50)
-		merger = add_interferometer_merger(circuit, origin=merger_pos)
-		merger_outputs.append(merger["output_port"])
-	
-	# 5. Add output grating couplers (returns instance refs)
+	# 3. Add output grating couplers (returns instance refs)
 	output_gc_refs = add_output_grating_coupler_array(
 		circuit,
 		origin=output_gc_pos,
@@ -578,6 +604,19 @@ def generate_SC_circuit(
 		pitch=gc_pitch,
 		orientation="West",
 	)
+
+	# 4. Feature-specific output routing (dummy for now)
+	mode = feature_mode.lower()
+	if mode == "power":
+		_route_outputs_power_mode(circuit, sc_ports["ref"], output_gc_refs)
+	elif mode == "amplitude_same_lenght":
+		_route_outputs_amplitude_same_length_mode(circuit, sc_ports["ref"], output_gc_refs)
+	elif mode == "phase":
+		_route_outputs_phase_mode(circuit, sc_ports["ref"])
+	else:
+		raise ValueError(
+			"feature_mode must be one of: power, amplitude_same_lenght, phase"
+		)
 
 	# Routing: connect top GC to bottom GC following drawn path
 	try:
@@ -641,8 +680,9 @@ def build_from_template(
 			parent_cell=subdie_2,
 			origin=(200, 1170),  # Absolute position within Sub_Die_2
 			num_inputs=8,
-			num_outputs=0,
+			num_outputs=4,
 			gc_pitch=127.0,
+			feature_mode="power",
 		)
 		# Add another SC circuit instance at different position if needed
 
