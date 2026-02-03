@@ -283,7 +283,7 @@ def connect_gc_top_bottom_drawn(
 	gc_refs: list,
 	front_dx: float = 0.0,
 	first_drop: float = 20.0,
-	back_offset: float = 5.0,
+	back_offset: float = 10.0,
 	bottom_rise: float = 0.0,
 	bottom_dx1: float = 30.0,
 	bottom_dx2: float = 30.0,
@@ -364,12 +364,12 @@ def connect_gc_top_bottom_drawn(
 	cur = place_chain(cur, [bend_r])
 	cur = place_chain(cur, [gf.components.straight(length=first_drop, cross_section=cs)])
 	cur = place_chain(cur, [bend_r])
-	straight_len = max(10, cur.x - x_back)
+	straight_len = abs(cur.x - x_back)
 	cur = place_chain(cur, [gf.components.straight(length=straight_len, cross_section=cs)])
 	cur = place_chain(cur, [bend_l])
 
 	# Backbone vertical straight from top to bottom anchor
-	backbone_len = abs(cur.y - y_mid - 135)
+	backbone_len = abs(cur.y - y_mid)/4
 	backbone = circuit << gf.components.straight(length=max(1, backbone_len), cross_section=cs)
 	backbone.rotate(90)
 	backbone.connect("o1", cur)
@@ -380,7 +380,7 @@ def connect_gc_top_bottom_drawn(
 	cur_b = place_chain(cur_b, [bend_l])
 	cur_b = place_chain(cur_b, [gf.components.straight(length=bottom_rise, cross_section=cs)])
 	cur_b = place_chain(cur_b, [bend_l])
-	straight_len_b = max(10, cur_b.x - x_back)
+	straight_len_b = abs(cur_b.x - x_back)
 	cur_b = place_chain(cur_b, [gf.components.straight(length=straight_len_b, cross_section=cs)])
 	cur_b = place_chain(cur_b, [bend_r])
 	# Connect to backbone bottom by a short straight if needed
@@ -481,7 +481,7 @@ def connect_star_coupler_inputs_to_gcs(
 		gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
 		# Use S-bend only for i3/i4 (indices 2 and 3 in top-to-bottom order) for SC input ports
-		sbend_indices = {	2, 3}
+		sbend_indices = {1, 2, 3}
 		bundle_in = [p for i, p in enumerate(input_ports_norm) if i not in sbend_indices]
 		bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
 		sbend_in = [p for i, p in enumerate(input_ports_norm) if i in sbend_indices]
@@ -527,7 +527,11 @@ def _route_outputs_power_mode(
 	# Ensure OUT1 (top) connects to OUT6 (bottom)
 	gc_refs_sorted = sorted(output_gc_refs, key=lambda r: r.center[1], reverse=True)
 	if len(gc_refs_sorted) >= 2:
-		connect_gc_top_bottom_drawn(circuit, gc_refs_sorted)
+		# Swap to flip the routing (top goes down, bottom goes up)
+		connect_gc_top_bottom_drawn(circuit,
+							  list(reversed(gc_refs_sorted)),
+							  back_offset=-20
+)
 
 	# Route star outputs to OUT2..OUT5 (skip top/bottom GC)
 	gc_refs_for_outputs = gc_refs_sorted
@@ -823,8 +827,8 @@ def build_from_template(
 		# Generate complete SC circuit with relative positioning
 		generate_SC_circuit(
 			parent_cell=subdie_2,
-			origin=(200, 1170),  # Absolute position within Sub_Die_2
-			num_inputs=8,
+			origin=(250, 1150),  # Absolute position within Sub_Die_2
+			num_inputs=7,
 			num_outputs=4,
 			gc_pitch=127.0,
 			feature_mode="power",
