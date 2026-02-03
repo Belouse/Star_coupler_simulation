@@ -481,7 +481,7 @@ def connect_star_coupler_inputs_to_gcs(
 		gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
 		# Use S-bend only for i3/i4 (indices 2 and 3 in top-to-bottom order) for SC input ports
-		sbend_indices = {2, 3}
+		sbend_indices = {	2, 3}
 		bundle_in = [p for i, p in enumerate(input_ports_norm) if i not in sbend_indices]
 		bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
 		sbend_in = [p for i, p in enumerate(input_ports_norm) if i in sbend_indices]
@@ -818,7 +818,7 @@ def build_from_template(
 			gc_pitch=127.0,
 			feature_mode="power",
 			output_gc_dx = -800,
-			output_gc_dy= 500,
+			output_gc_dy= 450,
 		)
 
 
