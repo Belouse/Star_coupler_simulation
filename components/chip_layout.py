@@ -17,6 +17,47 @@ from star_coupler import star_coupler
 warnings.filterwarnings("ignore", message=".*ignored for cross_section.*")
 
 
+def normalize_port_width(
+	circuit: gf.Component,
+	port: gf.Port,
+	target_width: float,
+	length: float = 10.0,
+) -> gf.Port:
+	"""Insert a taper if needed so the returned port has target_width."""
+	if abs(port.width - target_width) < 1e-6:
+		return port
+	taper = gf.components.taper(
+		length=length,
+		width1=port.width,
+		width2=target_width,
+		layer=port.layer,
+	)
+	ref = circuit << taper
+	ref.connect("o1", port)
+	return ref.ports["o2"]
+
+
+def flip_port_orientation(
+	circuit: gf.Component,
+	port: gf.Port,
+	target_orientation: int,
+	length: float = 20.0,
+) -> gf.Port:
+	"""Returns a new port with target orientation by inserting a short straight."""
+	if port.orientation == target_orientation:
+		return port
+	cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
+	straight = gf.components.straight(length=length, cross_section=cs_port)
+	ref = circuit << straight
+	if target_orientation == 0:
+		ref.connect("o2", port)
+		return ref.ports["o1"]
+	if target_orientation == 180:
+		ref.connect("o1", port)
+		return ref.ports["o2"]
+	return port
+
+
 # ============================================================================
 # Component Generation Functions (Relative positioning within circuit)
 # ============================================================================
@@ -392,35 +433,6 @@ def connect_star_coupler_inputs_to_gcs(
 			)
 		)
 
-	def _normalize_port_width(port: gf.Port, target_width: float, length: float = 10.0) -> gf.Port:
-		"""Insert a taper if needed so the returned port has target_width."""
-		if abs(port.width - target_width) < 1e-6:
-			return port
-		taper = gf.components.taper(
-			length=length,
-			width1=port.width,
-			width2=target_width,
-			layer=port.layer,
-		)
-		ref = circuit << taper
-		ref.connect("o1", port)
-		return ref.ports["o2"]
-
-	def _flip_port_orientation(port: gf.Port, target_orientation: int, length: float = 20.0) -> gf.Port:
-		"""Returns a new port with target orientation by inserting a short straight."""
-		if port.orientation == target_orientation:
-			return port
-		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
-		straight = gf.components.straight(length=length, cross_section=cs_port)
-		ref = circuit << straight
-		if target_orientation == 0:
-			ref.connect("o2", port)
-			return ref.ports["o1"]
-		if target_orientation == 180:
-			ref.connect("o1", port)
-			return ref.ports["o2"]
-		return port
-
 	def _extend_port(port: gf.Port, length: float = 25.0) -> gf.Port:
 		"""Extend a port in its facing direction by a straight of given length."""
 		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
@@ -443,15 +455,17 @@ def connect_star_coupler_inputs_to_gcs(
 			radius=bend_radius,
 		)
 		input_ports_norm = [
-			_flip_port_orientation(
-				_normalize_port_width(port, target_width),
+			flip_port_orientation(
+				circuit,
+				normalize_port_width(circuit, port, target_width),
 				target_orientation,
 			)
 			for port in input_ports
 		]
 		gc_ports_norm = [
-			_flip_port_orientation(
-				_normalize_port_width(port, target_width),
+			flip_port_orientation(
+				circuit,
+				normalize_port_width(circuit, port, target_width),
 				target_orientation,
 			)
 			for port in gc_ports
@@ -513,35 +527,6 @@ def _route_outputs_power_mode(
 	output_ports = output_ports[:count]
 	gc_ports = gc_ports[:count]
 
-	def _normalize_port_width(port: gf.Port, target_width: float, length: float = 10.0) -> gf.Port:
-		"""Insert a taper if needed so the returned port has target_width."""
-		if abs(port.width - target_width) < 1e-6:
-			return port
-		taper = gf.components.taper(
-			length=length,
-			width1=port.width,
-			width2=target_width,
-			layer=port.layer,
-		)
-		ref = circuit << taper
-		ref.connect("o1", port)
-		return ref.ports["o2"]
-
-	def _flip_port_orientation(port: gf.Port, target_orientation: int, length: float = 20.0) -> gf.Port:
-		"""Returns a new port with target orientation by inserting a short straight."""
-		if port.orientation == target_orientation:
-			return port
-		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
-		straight = gf.components.straight(length=length, cross_section=cs_port)
-		ref = circuit << straight
-		if target_orientation == 0:
-			ref.connect("o2", port)
-			return ref.ports["o1"]
-		if target_orientation == 180:
-			ref.connect("o1", port)
-			return ref.ports["o2"]
-		return port
-
 	# Normalize widths and orientations for routing
 	target_orientation = int(gc_ports[0].orientation)
 	target_width = min([p.width for p in (output_ports + gc_ports)])
@@ -551,15 +536,17 @@ def _route_outputs_power_mode(
 		radius=50.0,
 	)
 	output_ports_norm = [
-		_flip_port_orientation(
-			_normalize_port_width(port, target_width),
+		flip_port_orientation(
+			circuit,
+			normalize_port_width(circuit, port, target_width),
 			target_orientation,
 		)
 		for port in output_ports
 	]
 	gc_ports_norm = [
-		_flip_port_orientation(
-			_normalize_port_width(port, target_width),
+		flip_port_orientation(
+			circuit,
+			normalize_port_width(circuit, port, target_width),
 			target_orientation,
 		)
 		for port in gc_ports
@@ -613,6 +600,8 @@ def generate_SC_circuit(
 	num_outputs: int = 4,
 	gc_pitch: float = 127.0,
 	feature_mode: str = "power",
+	output_gc_dx: float = 350.0,
+	output_gc_dy: float = 0.0,
 ) -> gf.Component:
 	"""Generate complete Star Coupler circuit with all components.
 	
@@ -645,7 +634,6 @@ def generate_SC_circuit(
 	star_coupler_pos = (0, 0)
 	splitter_start_pos = (400, 0)
 	merger_start_pos = (600, 0)
-	output_gc_pos = (800, 0)
 	
 	# 1. Add input grating couplers (returns instance refs)
 	input_gc_refs = add_input_grating_coupler_array(
@@ -673,10 +661,18 @@ def generate_SC_circuit(
 	)
 	
 	# 3. Add output grating couplers (returns instance refs)
+	output_gc_count = num_outputs + 2
+	star_center_x = sc_ports["ref"].center[0]
+	star_center_y = sc_ports["ref"].center[1]
+	array_height = (output_gc_count - 1) * gc_pitch
+	output_gc_pos = (
+		star_center_x + output_gc_dx,
+		star_center_y + (array_height / 2.0) + output_gc_dy,
+	)
 	output_gc_refs = add_output_grating_coupler_array(
 		circuit,
 		origin=output_gc_pos,
-		num_couplers=num_outputs,
+		num_couplers=output_gc_count,
 		pitch=gc_pitch,
 		orientation="West",
 	)
