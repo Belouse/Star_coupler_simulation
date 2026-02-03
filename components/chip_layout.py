@@ -227,6 +227,7 @@ def add_output_grating_coupler_array(
 	label_prefix: str | None = "OUT",
 	label_offset: tuple[float, float] = (-35.0, 0.0),
 	label_size: float = 8.0,
+	label_order: str = "top_to_bottom",
 ) -> list:
 	"""Add output grating coupler array to circuit.
 	
@@ -261,11 +262,15 @@ def add_output_grating_coupler_array(
 
 		gc_refs.append(gc_ref)
 
-		# Add engraved label near port
-		if label_prefix:
+	# Add engraved labels after placement to enforce ordering
+	if label_prefix and gc_refs:
+		if label_order not in {"top_to_bottom", "bottom_to_top"}:
+			raise ValueError("label_order must be 'top_to_bottom' or 'bottom_to_top'")
+		sorted_refs = sorted(gc_refs, key=lambda r: r.center[1], reverse=(label_order == "top_to_bottom"))
+		for index, gc_ref in enumerate(sorted_refs, start=1):
 			add_port_label(
 				circuit,
-				text=f"{label_prefix}{i + 1}",
+				text=f"{label_prefix}{index}",
 				position=(gc_ref.center[0] + label_offset[0], gc_ref.center[1] + label_offset[1]),
 				size=label_size,
 			)
@@ -284,7 +289,7 @@ def connect_gc_top_bottom_drawn(
 	bottom_dx2: float = 30.0,
 	end_dx: float = 0.0,
 ) -> None:
-	"""Connect top GC to bottom GC following the drawn path (image #3).
+	"""Connect top GC to bottom GC
 
 	Path intent (from top):
 	- short straight from top GC (east)
@@ -519,8 +524,40 @@ def _route_outputs_power_mode(
 	if not output_ports or not output_gc_refs:
 		return
 
+	# Ensure OUT1 (top) connects to OUT6 (bottom)
+	gc_refs_sorted = sorted(output_gc_refs, key=lambda r: r.center[1], reverse=True)
+	if len(gc_refs_sorted) >= 2:
+		connect_gc_top_bottom_drawn(circuit, gc_refs_sorted)
+
+	# Route star outputs to OUT2..OUT5 (skip top/bottom GC)
+	gc_refs_for_outputs = gc_refs_sorted
+	if len(gc_refs_sorted) >= len(output_ports) + 2:
+		gc_refs_for_outputs = gc_refs_sorted[1:-1]
+
+	output_ports = [
+		gf.Port(
+			name=port.name,
+			center=port.center,
+			width=port.width,
+			orientation=port.orientation,
+			layer=gf.get_layer(SIN_LAYER),
+		)
+		for port in output_ports
+	]
 	output_ports.sort(key=lambda p: p.center[1], reverse=True)
-	gc_ports = [list(ref.ports)[0] for ref in output_gc_refs]
+
+	gc_ports = []
+	for ref in gc_refs_for_outputs:
+		gc_port = list(ref.ports)[0]
+		gc_ports.append(
+			gf.Port(
+				name=gc_port.name,
+				center=gc_port.center,
+				width=gc_port.width,
+				orientation=gc_port.orientation,
+				layer=gf.get_layer(SIN_LAYER),
+			)
+		)
 	gc_ports.sort(key=lambda p: p.center[1], reverse=True)
 
 	count = min(len(output_ports), len(gc_ports))
@@ -555,16 +592,33 @@ def _route_outputs_power_mode(
 	output_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 	gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
-	gf.routing.route_bundle(
-		circuit,
-		gc_ports_norm,
-		output_ports_norm,
-		cross_section=cs,
-		radius=50.0,
-		sort_ports=False,
-		separation=10.0,
-		auto_taper=False,
-	)
+	# Use S-bend for OUT3/OUT4 (indices 1 and 2 in top-to-bottom order)
+	sbend_indices = {1, 2}
+	bundle_out = [p for i, p in enumerate(output_ports_norm) if i not in sbend_indices]
+	bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
+	sbend_out = [p for i, p in enumerate(output_ports_norm) if i in sbend_indices]
+	sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in sbend_indices]
+
+	if bundle_out and bundle_gc:
+		gf.routing.route_bundle(
+			circuit,
+			bundle_gc,
+			bundle_out,
+			cross_section=cs,
+			radius=50.0,
+			sort_ports=False,
+			separation=10.0,
+			auto_taper=False,
+		)
+
+	if sbend_out and sbend_gc:
+		gf.routing.route_bundle_sbend(
+			circuit,
+			sbend_gc,
+			sbend_out,
+			enforce_port_ordering=True,
+			cross_section=cs,
+		)
 
 
 def _route_outputs_amplitude_same_length_mode(
@@ -600,7 +654,7 @@ def generate_SC_circuit(
 	num_outputs: int = 4,
 	gc_pitch: float = 127.0,
 	feature_mode: str = "power",
-	output_gc_dx: float = 350.0,
+	output_gc_dx: float = 0.0,
 	output_gc_dy: float = 0.0,
 ) -> gf.Component:
 	"""Generate complete Star Coupler circuit with all components.
@@ -662,12 +716,20 @@ def generate_SC_circuit(
 	
 	# 3. Add output grating couplers (returns instance refs)
 	output_gc_count = num_outputs + 2
-	star_center_x = sc_ports["ref"].center[0]
-	star_center_y = sc_ports["ref"].center[1]
+	output_ports = sc_ports.get("output_ports", [])
+	if output_ports:
+		max_x = max(p.center[0] for p in output_ports)
+		min_y = min(p.center[1] for p in output_ports)
+		max_y = max(p.center[1] for p in output_ports)
+		star_outputs_center_y = (min_y + max_y) / 2.0
+	else:
+		star_bbox = sc_ports["ref"].dbbox()
+		max_x = star_bbox.right
+		star_outputs_center_y = (star_bbox.top + star_bbox.bottom) / 2.0
 	array_height = (output_gc_count - 1) * gc_pitch
 	output_gc_pos = (
-		star_center_x + output_gc_dx,
-		star_center_y + (array_height / 2.0) + output_gc_dy,
+		max_x + output_gc_dx,
+		star_outputs_center_y + (array_height / 2.0) + output_gc_dy,
 	)
 	output_gc_refs = add_output_grating_coupler_array(
 		circuit,
@@ -755,7 +817,11 @@ def build_from_template(
 			num_outputs=4,
 			gc_pitch=127.0,
 			feature_mode="power",
+			output_gc_dx = -800,
+			output_gc_dy= 500,
 		)
+
+
 		# Add another SC circuit instance at different position if needed
 
 
