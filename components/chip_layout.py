@@ -730,7 +730,7 @@ def generate_SC_circuit(
 	)
 	
 	# 3. Add output grating couplers (returns instance refs)
-	output_gc_count = num_outputs + 2
+	output_gc_count = num_outputs
 	output_ports = sc_ports.get("output_ports", [])
 	if output_ports:
 		max_x = max(p.center[0] for p in output_ports)
@@ -829,11 +829,11 @@ def build_from_template(
 			parent_cell=subdie_2,
 			origin=(250, 1150),  # Absolute position within Sub_Die_2
 			num_inputs=7,
-			num_outputs=4,
+			num_outputs=6,
 			gc_pitch=127.0,
 			feature_mode="power",
 			output_gc_dx = -1000,
-			output_gc_dy= 450,
+			output_gc_dy= 390,
 		)
 
 
