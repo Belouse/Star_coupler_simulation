@@ -54,8 +54,8 @@ wg_height = 0.4e-6  # 400 nm SiN core (per NanoSOI specs)
 # Wavelength configuration (global)
 # TODO: Modify for final simulation
 
-wavelength_start = 1.55e-6
-wavelength_stop = 1.55e-6
+wavelength_start = 1.45e-6
+wavelength_stop = 1.65e-6
 
 # Monitor coverage of the full component (used for index monitors)
 component_bbox = c.bbox()
