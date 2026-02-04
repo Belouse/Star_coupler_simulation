@@ -58,6 +58,19 @@ def flip_port_orientation(
 	return port
 
 
+def extend_port(
+	circuit: gf.Component,
+	port: gf.Port,
+	length: float = 25.0,
+) -> gf.Port:
+	"""Extend a port in its facing direction by a straight of given length."""
+	cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
+	straight = gf.components.straight(length=length, cross_section=cs_port)
+	ref = circuit << straight
+	ref.connect("o1", port)
+	return ref.ports["o2"]
+
+
 # ============================================================================
 # Component Generation Functions (Relative positioning within circuit)
 # ============================================================================
@@ -73,6 +86,60 @@ def add_port_label(
 	label = gf.components.text(text=text, size=size, layer=layer)
 	label_ref = circuit << label
 	label_ref.move(position)
+
+
+def _add_grating_coupler_array(
+	circuit: gf.Component,
+	origin: tuple[float, float],
+	num_couplers: int,
+	pitch: float,
+	orientation: str,
+	label_prefix: str | None,
+	label_offset: tuple[float, float],
+	label_size: float,
+	label_order: str = "placement",
+) -> list:
+	"""Add a grating coupler array to circuit."""
+	gc = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
+	orientation_map = {
+		"East": {"angle": 0, "dx": 0, "dy": -pitch},
+		"West": {"angle": 180, "dx": 0, "dy": -pitch},
+		"North": {"angle": 90, "dx": pitch, "dy": 0},
+		"South": {"angle": 270, "dx": pitch, "dy": 0},
+	}
+	config = orientation_map[orientation]
+	gc_refs = []
+
+	for i in range(num_couplers):
+		gc_ref = circuit << gc
+		x_pos = origin[0] + i * config["dx"]
+		y_pos = origin[1] + i * config["dy"]
+		gc_ref.move((x_pos, y_pos))
+		gc_ref.rotate(config["angle"])
+		gc_refs.append(gc_ref)
+
+	if label_prefix and gc_refs:
+		if label_order == "placement":
+			label_refs = gc_refs
+		elif label_order in {"top_to_bottom", "bottom_to_top"}:
+			label_refs = sorted(
+				gc_refs,
+				key=lambda r: r.center[1],
+				reverse=(label_order == "top_to_bottom"),
+			)
+		else:
+			raise ValueError(
+				"label_order must be 'placement', 'top_to_bottom', or 'bottom_to_top'"
+			)
+		for index, gc_ref in enumerate(label_refs, start=1):
+			add_port_label(
+				circuit,
+				text=f"{label_prefix}{index}",
+				position=(gc_ref.center[0] + label_offset[0], gc_ref.center[1] + label_offset[1]),
+				size=label_size,
+			)
+
+	return gc_refs
 
 def add_input_grating_coupler_array(
 	circuit: gf.Component,
@@ -96,38 +163,17 @@ def add_input_grating_coupler_array(
 	Returns:
 		List of grating coupler instance references.
 	"""
-	gc = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
-	
-	orientation_map = {
-		"East": {"angle": 0, "dx": 0, "dy": -pitch},
-		"West": {"angle": 180, "dx": 0, "dy": -pitch},
-		"North": {"angle": 90, "dx": pitch, "dy": 0},
-		"South": {"angle": 270, "dx": pitch, "dy": 0},
-	}
-	
-	config = orientation_map[orientation]
-	gc_refs = []
-
-	for i in range(num_couplers):
-		gc_ref = circuit << gc
-		x_pos = origin[0] + i * config["dx"]
-		y_pos = origin[1] + i * config["dy"]
-		gc_ref.move((x_pos, y_pos))
-		gc_ref.rotate(config["angle"])
-        
-		# Store instance reference for later routing
-		gc_refs.append(gc_ref)
-
-		# Add engraved label near port
-		if label_prefix:
-			add_port_label(
-				circuit,
-				text=f"{label_prefix}{i + 1}",
-				position=(gc_ref.center[0] + label_offset[0], gc_ref.center[1] + label_offset[1]),
-				size=label_size,
-			)
-
-	return gc_refs
+	return _add_grating_coupler_array(
+		circuit=circuit,
+		origin=origin,
+		num_couplers=num_couplers,
+		pitch=pitch,
+		orientation=orientation,
+		label_prefix=label_prefix,
+		label_offset=label_offset,
+		label_size=label_size,
+		label_order="placement",
+	)
 
 
 def add_star_coupler(
@@ -241,41 +287,17 @@ def add_output_grating_coupler_array(
 	Returns:
 		List of grating coupler instance references.
 	"""
-	gc = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
-	
-	orientation_map = {
-		"East": {"angle": 0, "dx": 0, "dy": -pitch},
-		"West": {"angle": 180, "dx": 0, "dy": -pitch},
-		"North": {"angle": 90, "dx": pitch, "dy": 0},
-		"South": {"angle": 270, "dx": pitch, "dy": 0},
-	}
-	
-	config = orientation_map[orientation]
-	gc_refs = []
-
-	for i in range(num_couplers):
-		gc_ref = circuit << gc
-		x_pos = origin[0] + i * config["dx"]
-		y_pos = origin[1] + i * config["dy"]
-		gc_ref.move((x_pos, y_pos))
-		gc_ref.rotate(config["angle"])
-
-		gc_refs.append(gc_ref)
-
-	# Add engraved labels after placement to enforce ordering
-	if label_prefix and gc_refs:
-		if label_order not in {"top_to_bottom", "bottom_to_top"}:
-			raise ValueError("label_order must be 'top_to_bottom' or 'bottom_to_top'")
-		sorted_refs = sorted(gc_refs, key=lambda r: r.center[1], reverse=(label_order == "top_to_bottom"))
-		for index, gc_ref in enumerate(sorted_refs, start=1):
-			add_port_label(
-				circuit,
-				text=f"{label_prefix}{index}",
-				position=(gc_ref.center[0] + label_offset[0], gc_ref.center[1] + label_offset[1]),
-				size=label_size,
-			)
-
-	return gc_refs
+	return _add_grating_coupler_array(
+		circuit=circuit,
+		origin=origin,
+		num_couplers=num_couplers,
+		pitch=pitch,
+		orientation=orientation,
+		label_prefix=label_prefix,
+		label_offset=label_offset,
+		label_size=label_size,
+		label_order=label_order,
+	)
 
 
 def connect_gc_top_bottom_drawn(
@@ -289,7 +311,7 @@ def connect_gc_top_bottom_drawn(
 	bottom_dx2: float = 30.0,
 	end_dx: float = 0.0,
 ) -> None:
-	"""Connect top GC to bottom GC
+	"""Connect top GC to bottom GC.
 
 	Path intent (from top):
 	- short straight from top GC (east)
@@ -314,8 +336,6 @@ def connect_gc_top_bottom_drawn(
 	y_bottom = p_bottom.y
 
 	# Waypoints (absolute coordinates) defining the drawn path
-	# Bottom logic (reverse of user description):
-	# backbone -> right -> down -> right -> down -> into GC
 	y_mid = y_bottom + bottom_rise
 
 	# Build explicit SiN waveguide segments with Euler bends
@@ -358,7 +378,7 @@ def connect_gc_top_bottom_drawn(
 		ref.move((dx, dy))
 		return ref.ports["o2"]
 
-	# Top segment: taper -> right bend -> right bend -> straight -> right bend (down) to backbone
+	# Top segment into the backbone
 	cur = place_start_taper_at(p_top, length=20)
 	cur = place_chain(cur, [gf.components.straight(length=front_dx, cross_section=cs)])
 	cur = place_chain(cur, [bend_r])
@@ -375,7 +395,7 @@ def connect_gc_top_bottom_drawn(
 	backbone.connect("o1", cur)
 	backbone_bottom = backbone.ports["o2"]
 
-	# Bottom segment: taper -> left bend -> left bend -> straight -> right bend into backbone
+	# Bottom segment into the backbone
 	cur_b = place_start_taper_at(p_bottom, length=20)
 	cur_b = place_chain(cur_b, [bend_l])
 	cur_b = place_chain(cur_b, [gf.components.straight(length=bottom_rise, cross_section=cs)])
@@ -438,14 +458,6 @@ def connect_star_coupler_inputs_to_gcs(
 			)
 		)
 
-	def _extend_port(port: gf.Port, length: float = 25.0) -> gf.Port:
-		"""Extend a port in its facing direction by a straight of given length."""
-		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
-		straight = gf.components.straight(length=length, cross_section=cs_port)
-		ref = circuit << straight
-		ref.connect("o1", port)
-		return ref.ports["o2"]
-
 	if input_ports and gc_ports:
 		count = min(len(input_ports), len(gc_ports))
 		input_ports = input_ports[:count]
@@ -480,15 +492,15 @@ def connect_star_coupler_inputs_to_gcs(
 		input_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 		gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
-		# Use S-bend only for i3/i4 (indices 2 and 3 in top-to-bottom order) for SC input ports
+		# Use S-bend for selected input ports (top-to-bottom indices)
 		sbend_indices = {1, 2, 3}
 		bundle_in = [p for i, p in enumerate(input_ports_norm) if i not in sbend_indices]
 		bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
 		sbend_in = [p for i, p in enumerate(input_ports_norm) if i in sbend_indices]
 		sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in sbend_indices]
 
-		# Push bends 25um to the right by extending GC-side ports (bundle only)
-		bundle_gc = [_extend_port(p, 150.0) for p in bundle_gc]
+		# Push bends to the right by extending GC-side ports (bundle only)
+		bundle_gc = [extend_port(circuit, p, 150.0) for p in bundle_gc]
 
 		if bundle_in and bundle_gc:
 			gf.routing.route_bundle(
@@ -515,11 +527,7 @@ def _route_outputs_power_mode(
 	star_ref: gf.ComponentReference,
 	output_gc_refs: list,
 ) -> None:
-	"""Route star coupler outputs directly to GC array (power mode).
-
-	TODO: Implement direct routing from star outputs to GC ports.
-	"""
-	# TODO: Replace with production routing constraints if needed
+	"""Route star coupler outputs directly to GC array (power mode)."""
 	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
 	if not output_ports or not output_gc_refs:
 		return
@@ -596,14 +604,6 @@ def _route_outputs_power_mode(
 	output_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 	gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
-	def _extend_port(port: gf.Port, length: float = 35.0) -> gf.Port:
-		"""Extend a port in its facing direction by a straight of given length."""
-		cs_port = gf.cross_section.cross_section(layer=port.layer, width=port.width)
-		straight = gf.components.straight(length=length, cross_section=cs_port)
-		ref = circuit << straight
-		ref.connect("o1", port)
-		return ref.ports["o2"]
-
 	# Use S-bend for OUT3/OUT4 (indices 1 and 2 in top-to-bottom order)
 	sbend_indices = {1, 2}
 	bundle_out = [p for i, p in enumerate(output_ports_norm) if i not in sbend_indices]
@@ -612,7 +612,7 @@ def _route_outputs_power_mode(
 	sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in sbend_indices]
 
 	# Push bundle bends away from GC ports (OUT2/OUT5)
-	bundle_gc = [_extend_port(p, 200.0) for p in bundle_gc]
+	bundle_gc = [extend_port(circuit, p, 200.0) for p in bundle_gc]
 
 	if bundle_out and bundle_gc:
 		gf.routing.route_bundle(
@@ -680,9 +680,8 @@ def generate_SC_circuit(
 	Circuit flow:
 	1. Input GC array (East orientation)
 	2. Star coupler
-	3. Power splitters (1x2, 50/50)
-	4. Interferometer mergers (2x1)
-	5. Output GC array (West orientation)
+	3. Output GC array (West orientation)
+	4. Feature-specific routing
 	
 	Args:
 		parent_cell: Parent component to add circuit to.
@@ -701,8 +700,6 @@ def generate_SC_circuit(
 	# Define relative positions within the circuit
 	input_gc_pos = (0, 0)
 	star_coupler_pos = (0, 0)
-	splitter_start_pos = (400, 0)
-	merger_start_pos = (600, 0)
 	
 	# 1. Add input grating couplers (returns instance refs)
 	input_gc_refs = add_input_grating_coupler_array(
