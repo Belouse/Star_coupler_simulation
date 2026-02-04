@@ -225,7 +225,7 @@ def add_output_grating_coupler_array(
 	pitch: float = 127.0,
 	orientation: str = "West",
 	label_prefix: str | None = "OUT",
-	label_offset: tuple[float, float] = (-35.0, 0.0),
+	label_offset: tuple[float, float] = (-52.0, 5.0),
 	label_size: float = 8.0,
 	label_order: str = "top_to_bottom",
 ) -> list:
@@ -836,7 +836,16 @@ def build_from_template(
 			output_gc_dy= 390,
 		)
 
-
+		generate_SC_circuit(
+			parent_cell=subdie_2,
+			origin=(250, 261),  # Absolute position within Sub_Die_2
+			num_inputs=7,
+			num_outputs=6,
+			gc_pitch=127.0,
+			feature_mode="phase",
+			output_gc_dx = -1000,
+			output_gc_dy= 390,
+		)
 		# Add another SC circuit instance at different position if needed
 
 
