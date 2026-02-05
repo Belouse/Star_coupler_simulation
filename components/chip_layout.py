@@ -686,8 +686,8 @@ def add_mmi_coupler(
 def _route_outputs_phase_mode(
 	circuit: gf.Component,
 	star_ref: gf.ComponentReference,
-	star_coupler_shift_x: float = 000.0,
-	star_coupler_shift_y: float = 0.0,
+	MMI_star_coupler_shift_x: float = 0.0,
+	MMI_star_coupler_shift_y: float = 0.0,
 ) -> None:
 	"""Interfere star coupler outputs pairwise (phase mode).
 
@@ -707,21 +707,225 @@ def _route_outputs_phase_mode(
 	out1 = output_ports[0]  # Top
 	out2 = output_ports[1]  # Second from top
 	
-	# Calculate MMI position (to the right of star coupler outputs)
-	mmi_x = out1.center[0] + star_coupler_shift_x
-	mmi_y = (out1.center[1] + out2.center[1]) / 2.0 + star_coupler_shift_y # Between the two ports
+	# Calculate MMI position (aligned with OUT#2 for o2 bottom port)
+	mmi_x = out2.center[0] + MMI_star_coupler_shift_x + 12.88 # 12.88 um is half MMI length
+	mmi_y = out2.center[1]  # Align MMI center with OUT#2 so o2 is close to OUT#2 level
 	
 	# Add MMI coupler
 	mmi_data = add_mmi_coupler(
 		circuit,
 		position=(mmi_x, mmi_y),
-		rotation=0.0,
+		rotation=180.0,
 	)
 	
 	print(f"[DEBUG] MMI placed at ({mmi_x:.2f}, {mmi_y:.2f})")
-	print(f"[DEBUG] MMI ports: {[p.name for p in mmi_data['ports']]}")
+	print(f"[DEBUG] MMI ports: {[(p.name, p.center) for p in mmi_data['ports']]}")
 	print(f"[DEBUG] OUT#1 at: {out1.center}")
 	print(f"[DEBUG] OUT#2 at: {out2.center}")
+	
+	# Identify MMI input ports (should be o1 for input)
+	mmi_ref = mmi_data["ref"]
+	mmi_ports = {p.name: p for p in mmi_ref.ports}
+	
+	# MMI port naming: o1 = input, o2/o3 = outputs
+	if "o1" not in mmi_ports:
+		print("[ERROR] MMI port 'o1' not found")
+		return
+	
+	mmi_input = mmi_ports["o1"]
+	
+	# Identify MMI input ports (o2 and o3 are the two inputs when used in reverse mode)
+	# o3 is the TOP input, o2 is the BOTTOM input
+	mmi_top_port = mmi_ports.get("o3", None)
+	mmi_bot_port = mmi_ports.get("o2", None)
+	
+	# Create cross-section for phase mode routing
+	cs_phase = gf.cross_section.cross_section(
+		layer=SIN_LAYER,
+		width=0.75,
+		radius=25.0,
+	)
+	
+	# Constants
+	L_SHORT = 300.0  # μm - short arm length
+	L_LONG = 475.0   # μm - long arm (L_SHORT + 175)
+	
+	# Normalize port widths (SC outputs are 1000 nm, need 750 nm)
+	target_width = 0.75
+	out1_norm = normalize_port_width(circuit, out1, target_width, length=10.0)
+	out2_norm = normalize_port_width(circuit, out2, target_width, length=10.0)
+	
+	# Connect OUT#2 (second) to MMI o2 (bottom) with SHORT arm (300 μm direct)
+	print(f"[DEBUG] Creating short arm: OUT#2 → MMI o2 bottom (L={L_SHORT} μm)")
+	
+	# Calculate distance to MMI o2
+	dx_short = mmi_bot_port.center[0] - out2_norm.center[0]
+	print(f"[DEBUG] Short arm distance: {dx_short:.2f} μm")
+	
+	# Create straight waveguide for short arm
+	short_arm = gf.components.straight(length=L_SHORT, cross_section=cs_phase)
+	short_ref = circuit << short_arm
+	short_ref.connect("o1", out2_norm)
+	
+	short_end = short_ref.ports['o2']
+	print(f"[DEBUG] Short arm: OUT#2 ({out2_norm.center}) → end ({short_end.center})")
+	print(f"[DEBUG] MMI o2 at: {mmi_bot_port.center}")
+	
+	# TODO: Connect OUT#1 (top) to MMI with LONG arm (475 μm with upward loop)
+	print(f"[DEBUG] Long arm routing temporarily disabled")
+	print(f"[DEBUG] OUT#1 at: {out1_norm.center}")
+	print(f"[DEBUG] MMI o3 (top) at: {mmi_top_port.center}")
+	
+	bend_radius = 25.0
+	
+	# Calculate bend arc length (90° bend = pi * r / 2)
+	bend_arc_length = 3.14159 * bend_radius / 2  # Quarter circle
+	
+	# Strategy for long arm: Create upward loop to add 175 μm
+	# Path: RIGHT → BEND UP → UP → BEND RIGHT → RIGHT → BEND DOWN → DOWN → Reach MMI
+	
+	mmi_bot_y = mmi_bot_port.center[1]
+	out1_y = out1_norm.center[1]
+	
+	# The loop height (upward detour to add extra length)
+	loop_height = 120.0  # Go up by 120 μm
+	
+	# Total bend length with 3 bends (up, right, down)
+	total_bend_length = 3 * bend_arc_length
+	
+	# Available length for straight sections
+	available_straights = L_LONG - total_bend_length
+	
+	# Horizontal distance to MMI
+	dx_to_mmi = mmi_bot_port.center[0] - out1_norm.center[0]
+	
+	# Distribute straight segments:
+	# h1: initial right before loop, h2: up the loop, h3: across loop, h4: final right to MMI
+	# h4 doit être calculé pour atteindre la position X de o3
+	h1 = 40.0
+	h2 = loop_height
+	h3 = 40.0
+	# After h1, we go at (out1_x + h1, out1_y)
+	# After loop (up, right h3, down), we're at (out1_x + h1 + h3 + 2*bend_radius, out1_y)
+	# We need to reach mmi_bot_port.x = 844.884
+	current_x_at_final = out1_norm.center[0] + h1 + h3 + 2 * bend_radius
+	h4 = mmi_bot_port.center[0] - current_x_at_final
+	
+	print(f"[DEBUG] h4 calculation: mmi_x={mmi_bot_port.center[0]}, current_x_at_final={current_x_at_final}, h4={h4}")
+	
+	print(f"[DEBUG] Long arm geometry:")
+	print(f"  - Loop height: {loop_height} μm")
+	print(f"  - dx to MMI: {dx_to_mmi} μm")
+	print(f"  - h1={h1}, h2={h2}, h3={h3}, h4={h4} μm")
+	print(f"  - Total: {h1 + h2 + h3 + h4 + total_bend_length:.2f} μm")
+	
+	# Build the path for long arm using waypoints
+	# Use the S-bend or simple routing to reach the MMI port
+	# For now, create a simple path manually with waypoints
+	
+	current_port = out1_norm
+	
+	# Calculate waypoints for the upward loop
+	x_start = out1_norm.center[0]
+	x_mmi = mmi_top_port.center[0]
+	y_start = out1_norm.center[1]
+	y_mmi = mmi_top_port.center[1]
+	
+	# Waypoints: start → right h1 → up loop → right h3 → down → MMI
+	waypoints = [
+		(x_start, y_start),
+		(x_start + h1, y_start),
+		(x_start + h1, y_start + loop_height),  # UP = y increases
+		(x_start + h1 + h3, y_start + loop_height),
+		(x_start + h1 + h3, y_mmi),
+		(x_mmi, y_mmi),
+	]
+	
+	print(f"[DEBUG] Long arm waypoints: {waypoints}")
+	
+	# Connect waypoints with straight segments and bends
+	current_port = out1_norm
+	
+	# Segment 1: from OUT#1 to (x_start + h1, y_start) - RIGHT
+	if h1 > 0:
+		s1 = circuit << gf.components.straight(length=h1, cross_section=cs_phase)
+		s1.connect("o1", current_port)
+		current_port = s1.ports["o2"]
+	
+	# Segment 2: from (x_start + h1, y_start) to (x_start + h1, y_start - loop_height) - UP
+	# Need to turn, so add bend UP first
+	b1 = circuit << gf.components.bend_euler(angle=90, cross_section=cs_phase, radius=bend_radius)
+	b1.connect("o1", current_port)
+	current_port = b1.ports["o2"]
+	
+	# Then go UP
+	s2 = circuit << gf.components.straight(length=loop_height, cross_section=cs_phase)
+	s2.connect("o1", current_port)
+	current_port = s2.ports["o2"]
+	
+	# Segment 3: from (x_start + h1, y_start - loop_height) to (x_start + h1 + h3, y_start - loop_height) - RIGHT
+	# Turn to go RIGHT
+	b2 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=bend_radius)
+	b2.connect("o1", current_port)
+	current_port = b2.ports["o2"]
+	
+	# Then go RIGHT
+	if h3 > 0:
+		s3 = circuit << gf.components.straight(length=h3, cross_section=cs_phase)
+		s3.connect("o1", current_port)
+		current_port = s3.ports["o2"]
+	
+	# Segment 4: from (x_start + h1 + h3, y_start + loop_height) to (x_start + h1 + h3, y_mmi) - DOWN
+	# Turn to go DOWN
+	b3 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=bend_radius)
+	b3.connect("o1", current_port)
+	current_port = b3.ports["o2"]
+	
+	# Then go DOWN (or UP depending on the sign)
+	dy_down = (y_start + loop_height) - y_mmi
+	if dy_down > 0:
+		s4 = circuit << gf.components.straight(length=dy_down, cross_section=cs_phase)
+		s4.connect("o1", current_port)
+		current_port = s4.ports["o2"]
+	
+	# Segment 5: from (x_start + h1 + h3, y_mmi) to (x_mmi, y_mmi) - RIGHT to MMI
+	# Turn to go RIGHT  
+	b4 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=bend_radius)
+	b4.connect("o1", current_port)
+	current_port = b4.ports["o2"]
+	
+	# Final segment to MMI
+	dx_final = x_mmi - (x_start + h1 + h3)
+	if dx_final > 0:
+		s5 = circuit << gf.components.straight(length=dx_final, cross_section=cs_phase)
+		s5.connect("o1", current_port)
+		current_port = s5.ports["o2"]
+	
+	print(f"[DEBUG] Long arm end at: {current_port.center}")
+	print(f"[DEBUG] MMI input at: {mmi_input.center}")
+	
+	# Identify MMI input ports (o2 and o3 are the two inputs when used in reverse mode)
+	# o3 is the TOP input, o2 is the BOTTOM input
+	mmi_top_port = mmi_ports["o3"] if "o3" in mmi_ports else None
+	mmi_bot_port = mmi_ports["o2"] if "o2" in mmi_ports else None
+	
+	print(f"[DEBUG] MMI o3 (top) at: {mmi_top_port.center if mmi_top_port else 'NOT FOUND'}")
+	print(f"[DEBUG] MMI o2 (bot) at: {mmi_bot_port.center if mmi_bot_port else 'NOT FOUND'}")
+	print(f"[DEBUG] Short arm end at: {short_ref.ports['o2'].center}")
+	
+	# Get port layers and widths for debugging
+	short_end_port = short_ref.ports['o2']
+	print(f"[DEBUG] Short end port layer: {short_end_port.layer}, width: {short_end_port.width}")
+	if mmi_bot_port:
+		print(f"[DEBUG] MMI o2 port layer: {mmi_bot_port.layer}, width: {mmi_bot_port.width}")
+	if mmi_top_port:
+		print(f"[DEBUG] MMI o3 port layer: {mmi_top_port.layer}, width: {mmi_top_port.width}")
+	
+	# Simply note the connections for now - they'll be visualized in GDS
+	print(f"[DEBUG] Need to connect:")
+	print(f"  - Short arm end ({short_end_port.center}) to MMI o2 ({mmi_bot_port.center if mmi_bot_port else 'N/A'})")
+	print(f"  - Long arm end ({current_port.center}) to MMI o3 ({mmi_top_port.center if mmi_top_port else 'N/A'})")
+
 
 
 def generate_SC_circuit(
@@ -779,7 +983,9 @@ def generate_SC_circuit(
 		n_inputs=5,
 		n_outputs=4,
 	)
+
 	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-600.0)
+
 	connect_star_coupler_inputs_to_gcs(
 		circuit,
 		star_ref=sc_ports["ref"],
@@ -820,7 +1026,10 @@ def generate_SC_circuit(
 	elif mode == "amplitude_same_lenght":
 		_route_outputs_amplitude_same_length_mode(circuit, sc_ports["ref"], output_gc_refs)
 	elif mode == "phase":
-		_route_outputs_phase_mode(circuit, sc_ports["ref"])
+		_route_outputs_phase_mode(
+			circuit, sc_ports["ref"],
+			MMI_star_coupler_shift_x=300,
+							)
 	else:
 		raise ValueError(
 			"feature_mode must be one of: power, amplitude_same_lenght, phase"
@@ -891,7 +1100,7 @@ def build_from_template(
 			num_outputs=6,
 			gc_pitch=127.0,
 			feature_mode="power",
-			output_gc_dx = -1000,
+			output_gc_dx = -1180,
 			output_gc_dy= 390,
 		)
 
@@ -902,7 +1111,7 @@ def build_from_template(
 			num_outputs=6,
 			gc_pitch=127.0,
 			feature_mode="phase",
-			output_gc_dx = -1000,
+			output_gc_dx = -1180,
 			output_gc_dy= 390,
 		)
 		# Add another SC circuit instance at different position if needed
