@@ -1365,7 +1365,7 @@ def build_from_template(
 			sc_align_gc_index=3,  # Align star coupler center with IN4 (index 3)
 			expose_gc_ports={
 				"cal_in": ("input", 7),
-				"cal_out": ("output", 7),
+				"cal_out": ("output", 3),
 			},
 		)
 
@@ -1375,7 +1375,7 @@ def build_from_template(
 			input_port=sc_power["ref"].ports["cal_in"],
 			output_port=sc_power["ref"].ports["cal_out"],
 			short_length=300.0,
-			delta_L=175.0,
+			delta_L=300,
 			loop_side="north",
 			input_extension=200
 		)
@@ -1389,6 +1389,7 @@ def build_from_template(
 			feature_mode="phase",
 			output_gc_dx = -1180,
 			output_gc_dy= 390,
+			phase_delta_L=300.0,
 		)
 		# Add another SC circuit instance at different position if needed
 
