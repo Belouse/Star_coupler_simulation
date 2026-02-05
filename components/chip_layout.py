@@ -707,26 +707,45 @@ def _route_outputs_phase_mode(
 	out1 = output_ports[0]  # Top
 	out2 = output_ports[1]  # Second from top
 	
-	# Calculate MMI position (aligned with OUT#2 for o2 bottom port)
-	mmi_x = out2.center[0] + MMI_star_coupler_shift_x + 12.88 # 12.88 um is half MMI length
-	mmi_y = out2.center[1]  # Align MMI center with OUT#2 so o2 is close to OUT#2 level
+	# Calculate MMI position (align o2 bottom port with OUT#2)
+	# First place MMI temporarily to get port positions
+	temp_mmi_x = out2.center[0] + MMI_star_coupler_shift_x
+	temp_mmi_y = out2.center[1]
 	
-	# Add MMI coupler
+	# Add MMI coupler temporarily to get port offset
 	mmi_data = add_mmi_coupler(
 		circuit,
-		position=(mmi_x, mmi_y),
+		position=(temp_mmi_x, temp_mmi_y),
 		rotation=180.0,
 	)
 	
+	# Get the actual position of o2 port
+	mmi_ref = mmi_data["ref"]
+	mmi_ports = {p.name: p for p in mmi_ref.ports}
+	temp_o2_pos = mmi_ports["o2"].center
+	
+	# Calculate offset between MMI center and o2 port
+	offset_x = temp_o2_pos[0] - temp_mmi_x
+	offset_y = temp_o2_pos[1] - temp_mmi_y
+	
+	# Now reposition MMI so o2 is exactly 300 μm (L_SHORT) to the right of OUT#2
+	target_o2_x = out2.center[0] + 300.0  # Short arm length
+	target_o2_y = out2.center[1]  # Same Y as OUT#2
+	
+	mmi_x = target_o2_x - offset_x  # Adjust for port offset in X
+	mmi_y = target_o2_y - offset_y  # Adjust for port offset in Y
+	
+	# Move MMI to final position
+	mmi_ref.move((mmi_x - temp_mmi_x, mmi_y - temp_mmi_y))
+	
+	print(f"[DEBUG] MMI repositioned: offset_x={offset_x:.2f}, offset_y={offset_y:.2f} μm")
 	print(f"[DEBUG] MMI placed at ({mmi_x:.2f}, {mmi_y:.2f})")
+	print(f"[DEBUG] MMI o2 should be at: ({target_o2_x:.2f}, {target_o2_y:.2f})")
 	print(f"[DEBUG] MMI ports: {[(p.name, p.center) for p in mmi_data['ports']]}")
 	print(f"[DEBUG] OUT#1 at: {out1.center}")
 	print(f"[DEBUG] OUT#2 at: {out2.center}")
 	
-	# Identify MMI input ports (should be o1 for input)
-	mmi_ref = mmi_data["ref"]
-	mmi_ports = {p.name: p for p in mmi_ref.ports}
-	
+	# MMI ports are already in mmi_ports from above
 	# MMI port naming: o1 = input, o2/o3 = outputs
 	if "o1" not in mmi_ports:
 		print("[ERROR] MMI port 'o1' not found")
