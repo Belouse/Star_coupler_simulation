@@ -999,11 +999,21 @@ def _route_single_phase_mzi(
 	out_long_norm = normalize_port_width(circuit, out_long_port, target_width, length=10.0)
 	out_short_norm = normalize_port_width(circuit, out_short_port, target_width, length=10.0)
 
+	# Assign short/long based on loop direction to keep routing clear
+	ports_sorted = sorted([out_long_norm, out_short_norm], key=lambda p: p.center[1], reverse=True)
+	port_top, port_bottom = ports_sorted[0], ports_sorted[1]
+	if loop_side == "south":
+		short_start = port_top
+		long_start = port_bottom
+	else:
+		short_start = port_bottom
+		long_start = port_top
+
 	# Place MMI aligned to short arm port
 	try:
 		mmi_ref, mmi_ports = place_mmi_aligned_to_port(
 			circuit=circuit,
-			target_port=out_short_port,
+			target_port=short_start,
 			align_port_name="o2",
 			shift_x=MMI_shift_x,
 			shift_y=MMI_shift_y,
@@ -1023,6 +1033,10 @@ def _route_single_phase_mzi(
 	mmi_top_port = max([port_o2, port_o3], key=lambda p: p.center[1])
 	mmi_bot_port = min([port_o2, port_o3], key=lambda p: p.center[1])
 
+	# Swap MMI ports based on loop direction
+	if loop_side == "south":
+		mmi_top_port, mmi_bot_port = mmi_bot_port, mmi_top_port
+
 	# Create compatible MMI target ports
 	mmi_top_target = _make_port_compatible(mmi_top_port, SIN_LAYER, target_width)
 	mmi_bot_target = _make_port_compatible(mmi_bot_port, SIN_LAYER, target_width)
@@ -1030,8 +1044,8 @@ def _route_single_phase_mzi(
 	# Route arms
 	result = route_arms_to_mmi(
 		circuit=circuit,
-		short_start=out_short_norm,
-		long_start=out_long_norm,
+		short_start=short_start,
+		long_start=long_start,
 		mmi_top_port=mmi_top_target,
 		mmi_bot_port=mmi_bot_target,
 		short_length=MMI_shift_x,
