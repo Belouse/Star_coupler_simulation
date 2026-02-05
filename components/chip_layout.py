@@ -824,7 +824,7 @@ def build_from_template(
 		# Generate complete SC circuit with relative positioning
 		generate_SC_circuit(
 			parent_cell=subdie_2,
-			origin=(250, 1150),  # Absolute position within Sub_Die_2
+			origin=(210, 1150),  # Absolute position within Sub_Die_2
 			num_inputs=7,
 			num_outputs=6,
 			gc_pitch=127.0,
@@ -835,7 +835,7 @@ def build_from_template(
 
 		generate_SC_circuit(
 			parent_cell=subdie_2,
-			origin=(250, 261),  # Absolute position within Sub_Die_2
+			origin=(210, 261),  # Absolute position within Sub_Die_2
 			num_inputs=7,
 			num_outputs=6,
 			gc_pitch=127.0,
