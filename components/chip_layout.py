@@ -836,13 +836,21 @@ def _route_outputs_phase_mode(
 	star_ref: gf.ComponentReference,
 	MMI_star_coupler_shift_x: float = 0.0,
 	MMI_star_coupler_shift_y: float = 0.0,
+	delta_L: float = 175.0,
 ) -> None:
 	"""Interfere star coupler outputs pairwise (phase mode).
 
 	Architecture:
-	- OUT#1 (top) → short arm (300 μm) → MMI input bottom
-	- OUT#2 (2nd)  → long arm (475 μm) → MMI input top
+	- OUT#2 (2nd from top) → short arm (MMI_star_coupler_shift_x) → MMI o2 bottom
+	- OUT#1 (top) → long arm (MMI_star_coupler_shift_x + delta_L) with loop → MMI o3 top
 	- MMI outputs → to GCs (later)
+	
+	Args:
+		circuit: The circuit component.
+		star_ref: Star coupler reference.
+		MMI_star_coupler_shift_x: Horizontal shift for MMI placement (= short arm length in um).
+		MMI_star_coupler_shift_y: Vertical shift for MMI placement.
+		delta_L: Path length difference between long and short arms (um).
 	"""
 	# Get star coupler output ports
 	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
@@ -877,7 +885,7 @@ def _route_outputs_phase_mode(
 	offset_y = temp_o2_pos[1] - temp_mmi_y
 	
 	# Now reposition MMI so o2 is exactly 300 μm (L_SHORT) to the right of OUT#2
-	target_o2_x = out2.center[0] + 300.0  # Short arm length
+	target_o2_x = out2.center[0] + MMI_star_coupler_shift_x  # Short arm length
 	target_o2_y = out2.center[1]  # Same Y as OUT#2
 	
 	mmi_x = target_o2_x - offset_x  # Adjust for port offset in X
@@ -922,30 +930,40 @@ def _route_outputs_phase_mode(
 		radius=25.0,
 	)
 	
-	# Constants
-	L_SHORT = 300.0  # μm - short arm length
-	L_LONG = 475.0   # μm - long arm (L_SHORT + 175)
+	# Calculate arm lengths from parameters
+	# Short arm: distance from OUT to MMI defined by MMI_star_coupler_shift_x
+	# Long arm: short arm + delta_L (path length difference)
+	L_SHORT = MMI_star_coupler_shift_x
+	L_LONG = MMI_star_coupler_shift_x + delta_L
+	
+	print(f"[DEBUG] Phase mode arm lengths: L_SHORT={L_SHORT} um, L_LONG={L_LONG} um, delta_L={delta_L} um")
+	print(f"[DEBUG] Using MMI_star_coupler_shift_x={MMI_star_coupler_shift_x} um for short arm distance")
 	
 	# Normalize port widths (SC outputs are 1000 nm, need 750 nm)
 	target_width = 0.75
 	out1_norm = normalize_port_width(circuit, out1, target_width, length=10.0)
 	out2_norm = normalize_port_width(circuit, out2, target_width, length=10.0)
 	
-	# Connect OUT#2 (second) to MMI o2 (bottom) with SHORT arm (direct to MMI)
+	# Connect OUT#2 (second) to MMI o2 (bottom) with SHORT arm
 	print(f"[DEBUG] Creating short arm: OUT#2 -> MMI o2 bottom (target L={L_SHORT} um)")
 	
-	# Calculate actual distance to MMI o2
-	dx_short = mmi_bot_port.center[0] - out2_norm.center[0]
-	print(f"[DEBUG] Short arm actual distance: {dx_short:.2f} um")
-	
-	# Create straight waveguide for short arm with ACTUAL distance
-	short_arm = gf.components.straight(length=dx_short, cross_section=cs_phase)
+	# Create straight waveguide for short arm with specified length
+	short_arm = gf.components.straight(length=L_SHORT, cross_section=cs_phase)
 	short_ref = circuit << short_arm
 	short_ref.connect("o1", out2_norm)
 	
 	short_end = short_ref.ports['o2']
-	print(f"[DEBUG] Short arm: OUT#2 ({out2_norm.center}) → end ({short_end.center})")
+	print(f"[DEBUG] Short arm end at: {short_end.center}")
 	print(f"[DEBUG] MMI o2 at: {mmi_bot_port.center}")
+	print(f"[DEBUG] Short arm length created: {L_SHORT} um")
+	
+	# Add connector to MMI o2 if there's a small gap
+	dx_short_gap = mmi_bot_port.center[0] - short_end.center[0]
+	if abs(dx_short_gap) > 0.1:
+		print(f"[DEBUG] Adding short arm connector: {dx_short_gap:.3f} um")
+		short_connector = circuit << gf.components.straight(length=abs(dx_short_gap), cross_section=cs_phase)
+		short_connector.connect("o1", short_end)
+		short_end = short_connector.ports['o2']
 	
 	# Connect OUT#1 (top) to MMI with LONG arm using route_with_loop
 	print(f"[DEBUG] Creating long arm with loop: OUT#1 -> MMI o3 top (target L={L_LONG} um)")
@@ -972,8 +990,8 @@ def _route_outputs_phase_mode(
 		loop_side="north",
 		cross_section=cs_phase,
 		bend_radius=bend_radius,
-		h1=40.0,
-		h3=40.0,
+		h1=50.0,
+		h3=20.0,
 	)
 	
 	print(f"[DEBUG] Long arm end at: {current_port.center}")
@@ -984,39 +1002,17 @@ def _route_outputs_phase_mode(
 	mmi_top_port = mmi_ports["o3"] if "o3" in mmi_ports else None
 	mmi_bot_port = mmi_ports["o2"] if "o2" in mmi_ports else None
 	
-	print(f"[DEBUG] MMI o3 (top) at: {mmi_top_port.center if mmi_top_port else 'NOT FOUND'}")
-	print(f"[DEBUG] MMI o2 (bot) at: {mmi_bot_port.center if mmi_bot_port else 'NOT FOUND'}")
-	print(f"[DEBUG] Short arm end at: {short_ref.ports['o2'].center}")
-	
-	# Get port layers and widths for debugging
-	short_end_port = short_ref.ports['o2']
-	print(f"[DEBUG] Short end port layer: {short_end_port.layer}, width: {short_end_port.width}")
-	if mmi_bot_port:
-		print(f"[DEBUG] MMI o2 port layer: {mmi_bot_port.layer}, width: {mmi_bot_port.width}")
-	if mmi_top_port:
-		print(f"[DEBUG] MMI o3 port layer: {mmi_top_port.layer}, width: {mmi_top_port.width}")
-	
-	# Verify final connections and add connector segments if needed
 	print(f"[DEBUG] Final arm positions:")
-	print(f"  - Short arm end: {short_end_port.center}")
+	print(f"  - Short arm end: {short_end.center}")
 	print(f"  - MMI o2 target: {mmi_bot_port.center if mmi_bot_port else 'N/A'}")
 	print(f"  - Long arm end: {current_port.center}")
 	print(f"  - MMI o3 target: {mmi_top_port.center if mmi_top_port else 'N/A'}")
 	
-	# Add connector segments to close gaps
-	# Short arm connector
-	if mmi_bot_port:
-		dx_short_gap = abs(mmi_bot_port.center[0] - short_end_port.center[0])
-		if dx_short_gap > 0.1:
-			print(f"[DEBUG] Adding short arm connector: {dx_short_gap:.3f} μm")
-			short_connector = circuit << gf.components.straight(length=dx_short_gap, cross_section=cs_phase)
-			short_connector.connect("o1", short_end_port)
-	
-	# Long arm connector
+	# Add connector for long arm if there's a gap
 	if mmi_top_port:
 		dx_long_gap = abs(mmi_top_port.center[0] - current_port.center[0])
 		if dx_long_gap > 0.1:
-			print(f"[DEBUG] Adding long arm connector: {dx_long_gap:.3f} μm")
+			print(f"[DEBUG] Adding long arm connector: {dx_long_gap:.3f} um")
 			long_connector = circuit << gf.components.straight(length=dx_long_gap, cross_section=cs_phase)
 			long_connector.connect("o1", current_port)
 	
@@ -1125,7 +1121,8 @@ def generate_SC_circuit(
 		_route_outputs_phase_mode(
 			circuit, sc_ports["ref"],
 			MMI_star_coupler_shift_x=300,
-							)
+			delta_L=175
+		)
 	else:
 		raise ValueError(
 			"feature_mode must be one of: power, amplitude_same_lenght, phase"
@@ -1136,7 +1133,6 @@ def generate_SC_circuit(
 		connect_gc_top_bottom_drawn(circuit, input_gc_refs)
 	except Exception as e:
 		print(f"[WARN] connect_gc_top_bottom_drawn failed: {e}")
-	
 	
 	# Add circuit to parent cell at absolute origin position
 	circuit_ref = parent_cell << circuit
