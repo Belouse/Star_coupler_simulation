@@ -157,7 +157,7 @@ def star_coupler(
     angle_outputs: bool = True,
     taper_length: float = 40.0,
     taper_wide: float = 3.0,
-    wg_width: float = 1,
+    wg_width: float = 0.75,
     input_radius: float = 130.0,
     output_radius: float = 120.0,
     width_rect: float = 80.3,
