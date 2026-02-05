@@ -414,12 +414,26 @@ def place_star_coupler_gcs(
 	star_ref: gf.ComponentReference,
 	gc_refs: list,
 	gap: float = 0.0,
+	align_gc_index: int | None = None,
 ) -> None:
-	"""Place star coupler to the left of the GC array with a fixed gap."""
+	"""Place star coupler to the left of the GC array with a fixed gap.
+	
+	Args:
+		star_ref: Star coupler reference to position.
+		gc_refs: List of grating coupler references.
+		gap: Horizontal gap between star coupler and GC array.
+		align_gc_index: If provided, align star coupler center with this GC index.
+			If None, align with the center of all GCs.
+	"""
 	if not gc_refs:
 		return
 	gc_min_x = min(ref.dbbox().left for ref in gc_refs)
-	gc_center_y = sum(ref.center[1] for ref in gc_refs) / len(gc_refs)
+	
+	# Determine Y position: either center of all GCs or specific GC
+	if align_gc_index is not None and 0 <= align_gc_index < len(gc_refs):
+		gc_center_y = gc_refs[align_gc_index].center[1]
+	else:
+		gc_center_y = sum(ref.center[1] for ref in gc_refs) / len(gc_refs)
 
 	star_bbox = star_ref.dbbox()
 	star_center_y = (star_bbox.top + star_bbox.bottom) / 2
@@ -1029,6 +1043,7 @@ def generate_SC_circuit(
 	feature_mode: str = "power",
 	output_gc_dx: float = 0.0,
 	output_gc_dy: float = 0.0,
+	sc_align_gc_index: int | None = None,
 ) -> gf.Component:
 	"""Generate complete Star Coupler circuit with all components.
 	
@@ -1076,7 +1091,7 @@ def generate_SC_circuit(
 		n_outputs=4,
 	)
 
-	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-600.0)
+	place_star_coupler_gcs(sc_ports["ref"], input_gc_refs, gap=-600.0, align_gc_index=sc_align_gc_index)
 
 	connect_star_coupler_inputs_to_gcs(
 		circuit,
@@ -1120,8 +1135,8 @@ def generate_SC_circuit(
 	elif mode == "phase":
 		_route_outputs_phase_mode(
 			circuit, sc_ports["ref"],
-			MMI_star_coupler_shift_x=300,
-			delta_L=175
+			MMI_star_coupler_shift_x=200,
+			delta_L=300
 		)
 	else:
 		raise ValueError(
@@ -1194,6 +1209,7 @@ def build_from_template(
 			feature_mode="power",
 			output_gc_dx = -1180,
 			output_gc_dy= 390,
+			sc_align_gc_index=3,  # Align star coupler center with IN4 (index 3)
 		)
 
 		generate_SC_circuit(
