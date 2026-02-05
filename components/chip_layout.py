@@ -845,6 +845,128 @@ def route_with_loop(
 	return current_port
 
 
+
+def _make_port_compatible(
+	port: gf.Port,
+	layer: tuple[int, int],
+	width: float,
+) -> gf.Port:
+	"""Return a new port with specified layer/width, preserving center/orientation."""
+	return gf.Port(
+		name=port.name,
+		center=port.center,
+		width=width,
+		orientation=port.orientation,
+		layer=gf.get_layer(layer),
+	)
+
+
+def place_mmi_aligned_to_port(
+	circuit: gf.Component,
+	target_port: gf.Port,
+	align_port_name: str = "o2",
+	shift_x: float = 0.0,
+	shift_y: float = 0.0,
+	rotation: float = 180.0,
+) -> tuple[gf.ComponentReference, dict[str, gf.Port]]:
+	"""Place an MMI so that align_port_name is at target_port + (shift_x, shift_y)."""
+	temp_x = target_port.center[0] + shift_x
+	temp_y = target_port.center[1] + shift_y
+
+	mmi_data = add_mmi_coupler(
+		circuit,
+		position=(temp_x, temp_y),
+		rotation=rotation,
+	)
+	mmi_ref = mmi_data["ref"]
+	mmi_ports = {p.name: p for p in mmi_ref.ports}
+	if align_port_name not in mmi_ports:
+		raise ValueError(f"MMI port '{align_port_name}' not found")
+
+	align_port = mmi_ports[align_port_name]
+	offset_x = align_port.center[0] - temp_x
+	offset_y = align_port.center[1] - temp_y
+
+	# Move MMI so align_port is exactly at target + shift
+	mmi_ref.move((-offset_x, -offset_y))
+
+	# Refresh ports after move
+	mmi_ports = {p.name: p for p in mmi_ref.ports}
+	return mmi_ref, mmi_ports
+
+
+def route_arms_to_mmi(
+	circuit: gf.Component,
+	short_start: gf.Port,
+	long_start: gf.Port,
+	mmi_top_port: gf.Port,
+	mmi_bot_port: gf.Port,
+	short_length: float,
+	delta_L: float,
+	loop_side: str = "north",
+	cross_section=None,
+	bend_radius: float = 25.0,
+	h1: float = 50.0,
+	h3: float = 20.0,
+) -> dict:
+	"""Route short/long arms from start ports to MMI top/bottom ports."""
+	if cross_section is None:
+		cross_section = gf.cross_section.cross_section(
+			layer=short_start.layer,
+			width=short_start.width,
+			radius=bend_radius,
+		)
+
+	L_SHORT = short_length
+	L_LONG = short_length + delta_L
+
+	# Short arm
+	short_arm = gf.components.straight(length=L_SHORT, cross_section=cross_section)
+	short_ref = circuit << short_arm
+	short_ref.connect("o1", short_start)
+	short_end = short_ref.ports["o2"]
+
+	# Close short gap if needed
+	dx_short_gap = mmi_bot_port.center[0] - short_end.center[0]
+	if abs(dx_short_gap) > 0.1:
+		short_connector = circuit << gf.components.straight(
+			length=abs(dx_short_gap),
+			cross_section=cross_section,
+		)
+		short_connector.connect("o1", short_end)
+		short_end = short_connector.ports["o2"]
+
+	# Long arm with loop
+	current_port = route_with_loop(
+		circuit=circuit,
+		port_start=long_start,
+		port_end=mmi_top_port,
+		target_length=L_LONG,
+		loop_side=loop_side,
+		cross_section=cross_section,
+		bend_radius=bend_radius,
+		h1=h1,
+		h3=h3,
+	)
+
+	# Close long gap if needed
+	dx_long_gap = abs(mmi_top_port.center[0] - current_port.center[0])
+	if dx_long_gap > 0.1:
+		long_connector = circuit << gf.components.straight(
+			length=dx_long_gap,
+			cross_section=cross_section,
+		)
+		long_connector.connect("o1", current_port)
+		current_port = long_connector.ports["o2"]
+
+	return {
+		"short_end": short_end,
+		"long_end": current_port,
+		"L_SHORT": L_SHORT,
+		"L_LONG": L_LONG,
+	}
+
+
 def _route_outputs_phase_mode(
 	circuit: gf.Component,
 	star_ref: gf.ComponentReference,
@@ -855,183 +977,175 @@ def _route_outputs_phase_mode(
 	"""Interfere star coupler outputs pairwise (phase mode).
 
 	Architecture:
-	- OUT#2 (2nd from top) → short arm (MMI_star_coupler_shift_x) → MMI o2 bottom
-	- OUT#1 (top) → long arm (MMI_star_coupler_shift_x + delta_L) with loop → MMI o3 top
-	- MMI outputs → to GCs (later)
-	
-	Args:
-		circuit: The circuit component.
-		star_ref: Star coupler reference.
-		MMI_star_coupler_shift_x: Horizontal shift for MMI placement (= short arm length in um).
-		MMI_star_coupler_shift_y: Vertical shift for MMI placement.
-		delta_L: Path length difference between long and short arms (um).
+	- OUT#2 (2nd from top) -> short arm (MMI_star_coupler_shift_x) -> MMI o2 bottom
+	- OUT#1 (top) -> long arm (MMI_star_coupler_shift_x + delta_L) with loop -> MMI o3 top
+	- MMI outputs -> to GCs (later)
 	"""
 	# Get star coupler output ports
 	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
 	if len(output_ports) < 2:
 		print("[WARN] Phase mode needs at least 2 output ports")
 		return
-	
+
 	# Sort top to bottom
 	output_ports.sort(key=lambda p: p.center[1], reverse=True)
 	out1 = output_ports[0]  # Top
 	out2 = output_ports[1]  # Second from top
-	
-	# Calculate MMI position (align o2 bottom port with OUT#2)
-	# First place MMI temporarily to get port positions
-	temp_mmi_x = out2.center[0] + MMI_star_coupler_shift_x
-	temp_mmi_y = out2.center[1]
-	
-	# Add MMI coupler temporarily to get port offset
-	mmi_data = add_mmi_coupler(
-		circuit,
-		position=(temp_mmi_x, temp_mmi_y),
-		rotation=180.0,
-	)
-	
-	# Get the actual position of o2 port
-	mmi_ref = mmi_data["ref"]
-	mmi_ports = {p.name: p for p in mmi_ref.ports}
-	temp_o2_pos = mmi_ports["o2"].center
-	
-	# Calculate offset between MMI center and o2 port
-	offset_x = temp_o2_pos[0] - temp_mmi_x
-	offset_y = temp_o2_pos[1] - temp_mmi_y
-	
-	# Now reposition MMI so o2 is exactly 300 μm (L_SHORT) to the right of OUT#2
-	target_o2_x = out2.center[0] + MMI_star_coupler_shift_x  # Short arm length
-	target_o2_y = out2.center[1]  # Same Y as OUT#2
-	
-	mmi_x = target_o2_x - offset_x  # Adjust for port offset in X
-	mmi_y = target_o2_y - offset_y  # Adjust for port offset in Y
-	
-	# Move MMI to final position
-	mmi_ref.move((mmi_x - temp_mmi_x, mmi_y - temp_mmi_y))
-	
-	print(f"[DEBUG] MMI repositioned: offset_x={offset_x:.2f}, offset_y={offset_y:.2f} um")
-	print(f"[DEBUG] MMI placed at ({mmi_x:.2f}, {mmi_y:.2f})")
-	print(f"[DEBUG] MMI o2 should be at: ({target_o2_x:.2f}, {target_o2_y:.2f})")
-	
-	# Update port positions after move
-	mmi_ports = {p.name: p for p in mmi_ref.ports}
-	print(f"[DEBUG] MMI ports after move: {[(p.name, p.center) for p in mmi_ref.ports]}")
-	print(f"[DEBUG] OUT#1 at: {out1.center}")
-	print(f"[DEBUG] OUT#2 at: {out2.center}")
-	
-	# MMI ports are already in mmi_ports from above
-	# MMI port naming: o1 = input, o2/o3 = outputs
-	if "o1" not in mmi_ports:
-		print("[ERROR] MMI port 'o1' not found")
+
+	# Place MMI aligned to OUT#2 (short arm)
+	try:
+		mmi_ref, mmi_ports = place_mmi_aligned_to_port(
+			circuit=circuit,
+			target_port=out2,
+			align_port_name="o2",
+			shift_x=MMI_star_coupler_shift_x,
+			shift_y=MMI_star_coupler_shift_y,
+			rotation=180.0,
+		)
+	except ValueError as exc:
+		print(f"[ERROR] {exc}")
 		return
-	
-	mmi_input = mmi_ports["o1"]
-	
+
 	# Identify MMI input ports (o2 and o3 are the two inputs when used in reverse mode)
-	# Use actual Y positions to determine top/bottom (robust to rotations)
 	port_o2 = mmi_ports.get("o2", None)
 	port_o3 = mmi_ports.get("o3", None)
 	if port_o2 and port_o3:
 		mmi_top_port = max([port_o2, port_o3], key=lambda p: p.center[1])
 		mmi_bot_port = min([port_o2, port_o3], key=lambda p: p.center[1])
 	else:
-		mmi_top_port = port_o3
-		mmi_bot_port = port_o2	
-	
+		print("[ERROR] MMI ports o2/o3 not found")
+		return
+
 	# Create cross-section for phase mode routing
 	cs_phase = gf.cross_section.cross_section(
 		layer=SIN_LAYER,
 		width=0.75,
 		radius=25.0,
 	)
-	
-	# Calculate arm lengths from parameters
-	# Short arm: distance from OUT to MMI defined by MMI_star_coupler_shift_x
-	# Long arm: short arm + delta_L (path length difference)
-	L_SHORT = MMI_star_coupler_shift_x
-	L_LONG = MMI_star_coupler_shift_x + delta_L
-	
-	print(f"[DEBUG] Phase mode arm lengths: L_SHORT={L_SHORT} um, L_LONG={L_LONG} um, delta_L={delta_L} um")
-	print(f"[DEBUG] Using MMI_star_coupler_shift_x={MMI_star_coupler_shift_x} um for short arm distance")
-	
+
 	# Normalize port widths (SC outputs are 1000 nm, need 750 nm)
 	target_width = 0.75
 	out1_norm = normalize_port_width(circuit, out1, target_width, length=10.0)
 	out2_norm = normalize_port_width(circuit, out2, target_width, length=10.0)
-	
-	# Connect OUT#2 (second) to MMI o2 (bottom) with SHORT arm
-	print(f"[DEBUG] Creating short arm: OUT#2 -> MMI o2 bottom (target L={L_SHORT} um)")
-	
-	# Create straight waveguide for short arm with specified length
-	short_arm = gf.components.straight(length=L_SHORT, cross_section=cs_phase)
-	short_ref = circuit << short_arm
-	short_ref.connect("o1", out2_norm)
-	
-	short_end = short_ref.ports['o2']
-	print(f"[DEBUG] Short arm end at: {short_end.center}")
-	print(f"[DEBUG] MMI o2 at: {mmi_bot_port.center}")
-	print(f"[DEBUG] Short arm length created: {L_SHORT} um")
-	
-	# Add connector to MMI o2 if there's a small gap
-	dx_short_gap = mmi_bot_port.center[0] - short_end.center[0]
-	if abs(dx_short_gap) > 0.1:
-		print(f"[DEBUG] Adding short arm connector: {dx_short_gap:.3f} um")
-		short_connector = circuit << gf.components.straight(length=abs(dx_short_gap), cross_section=cs_phase)
-		short_connector.connect("o1", short_end)
-		short_end = short_connector.ports['o2']
-	
-	# Connect OUT#1 (top) to MMI with LONG arm using route_with_loop
-	print(f"[DEBUG] Creating long arm with loop: OUT#1 -> MMI o3 top (target L={L_LONG} um)")
-	print(f"[DEBUG] OUT#1 at: {out1_norm.center}")
-	print(f"[DEBUG] MMI o3 (top) at: {mmi_top_port.center}")
-	
-	bend_radius = 25.0
-	
-	# Create compatible port for MMI o3 with correct layer
-	mmi_o3_target = gf.Port(
-		name="mmi_o3_target",
-		center=mmi_top_port.center,
-		width=mmi_top_port.width,
-		orientation=mmi_top_port.orientation,
-		layer=gf.get_layer(SIN_LAYER),
-	)
-	
-	# Route with upward loop to achieve L_LONG path length
-	current_port = route_with_loop(
+
+	# Create compatible MMI target ports on SIN layer
+	mmi_top_target = _make_port_compatible(mmi_top_port, SIN_LAYER, target_width)
+	mmi_bot_target = _make_port_compatible(mmi_bot_port, SIN_LAYER, target_width)
+
+	result = route_arms_to_mmi(
 		circuit=circuit,
-		port_start=out1_norm,
-		port_end=mmi_o3_target,
-		target_length=L_LONG,
+		short_start=out2_norm,
+		long_start=out1_norm,
+		mmi_top_port=mmi_top_target,
+		mmi_bot_port=mmi_bot_target,
+		short_length=MMI_star_coupler_shift_x,
+		delta_L=delta_L,
 		loop_side="north",
 		cross_section=cs_phase,
-		bend_radius=bend_radius,
+		bend_radius=25.0,
 		h1=50.0,
 		h3=20.0,
 	)
-	
-	print(f"[DEBUG] Long arm end at: {current_port.center}")
-	print(f"[DEBUG] MMI input at: {mmi_input.center}")
-	
-	# Identify MMI input ports (o2 and o3 are the two inputs when used in reverse mode)
-	# o3 is the TOP input, o2 is the BOTTOM input
-	mmi_top_port = mmi_ports["o3"] if "o3" in mmi_ports else None
-	mmi_bot_port = mmi_ports["o2"] if "o2" in mmi_ports else None
-	
-	print(f"[DEBUG] Final arm positions:")
-	print(f"  - Short arm end: {short_end.center}")
-	print(f"  - MMI o2 target: {mmi_bot_port.center if mmi_bot_port else 'N/A'}")
-	print(f"  - Long arm end: {current_port.center}")
-	print(f"  - MMI o3 target: {mmi_top_port.center if mmi_top_port else 'N/A'}")
-	
-	# Add connector for long arm if there's a gap
-	if mmi_top_port:
-		dx_long_gap = abs(mmi_top_port.center[0] - current_port.center[0])
-		if dx_long_gap > 0.1:
-			print(f"[DEBUG] Adding long arm connector: {dx_long_gap:.3f} um")
-			long_connector = circuit << gf.components.straight(length=dx_long_gap, cross_section=cs_phase)
-			long_connector.connect("o1", current_port)
-	
-	print(f"[DEBUG] Arms connected to MMI ports")
 
+	print(
+		f"[DEBUG] Phase mode lengths: L_SHORT={result['L_SHORT']} um, "
+		f"L_LONG={result['L_LONG']} um, delta_L={delta_L} um"
+	)
+
+
+
+def add_mzi_calibration(
+	circuit: gf.Component,
+	input_port: gf.Port,
+	output_port: gf.Port,
+	short_length: float = 300.0,
+	delta_L: float = 175.0,
+	loop_side: str = "north",
+	bend_radius: float = 25.0,
+	h1: float = 50.0,
+	h3: float = 20.0,
+	input_extension: float = 20.0,
+	output_extension: float = 20.0,
+) -> None:
+	"""Add a standalone MZI calibration using two MMIs."""
+	target_width = 0.75
+	cs_phase = gf.cross_section.cross_section(
+		layer=SIN_LAYER,
+		width=target_width,
+		radius=bend_radius,
+	)
+
+	# Normalize and extend ports from GC
+	in_port = normalize_port_width(circuit, input_port, target_width, length=10.0)
+	if input_extension > 0:
+		in_port = extend_port(circuit, in_port, input_extension)
+
+	out_port = normalize_port_width(circuit, output_port, target_width, length=10.0)
+	if output_extension > 0:
+		out_port = extend_port(circuit, out_port, output_extension)
+
+	# Splitter MMI (o1 as input)
+	splitter = ubcpdk.cells.ANT_MMI_1x2_te1550_3dB_BB()
+	splitter_ref = circuit << splitter
+	splitter_ref.connect("o1", in_port)
+	splitter_ports = {p.name: p for p in splitter_ref.ports}
+	sp_o2 = splitter_ports.get("o2")
+	sp_o3 = splitter_ports.get("o3")
+	if not sp_o2 or not sp_o3:
+		print("[ERROR] Splitter MMI ports o2/o3 not found")
+		return
+	sp_top = max([sp_o2, sp_o3], key=lambda p: p.center[1])
+	sp_bot = min([sp_o2, sp_o3], key=lambda p: p.center[1])
+
+	# Combiner MMI aligned to short arm length
+	combiner_ref, combiner_ports = place_mmi_aligned_to_port(
+		circuit=circuit,
+		target_port=sp_bot,
+		align_port_name="o2",
+		shift_x=short_length,
+		shift_y=0.0,
+		rotation=180.0,
+	)
+	cb_o2 = combiner_ports.get("o2")
+	cb_o3 = combiner_ports.get("o3")
+	if not cb_o2 or not cb_o3:
+		print("[ERROR] Combiner MMI ports o2/o3 not found")
+		return
+	cb_top = max([cb_o2, cb_o3], key=lambda p: p.center[1])
+	cb_bot = min([cb_o2, cb_o3], key=lambda p: p.center[1])
+
+	# Route arms between splitter and combiner
+	sp_top_norm = _make_port_compatible(sp_top, SIN_LAYER, target_width)
+	sp_bot_norm = _make_port_compatible(sp_bot, SIN_LAYER, target_width)
+	cb_top_norm = _make_port_compatible(cb_top, SIN_LAYER, target_width)
+	cb_bot_norm = _make_port_compatible(cb_bot, SIN_LAYER, target_width)
+
+	route_arms_to_mmi(
+		circuit=circuit,
+		short_start=sp_bot_norm,
+		long_start=sp_top_norm,
+		mmi_top_port=cb_top_norm,
+		mmi_bot_port=cb_bot_norm,
+		short_length=short_length,
+		delta_L=delta_L,
+		loop_side=loop_side,
+		cross_section=cs_phase,
+		bend_radius=bend_radius,
+		h1=h1,
+		h3=h3,
+	)
+
+	# Connect combiner output to output port
+	combiner_out = combiner_ports.get("o1")
+	if combiner_out:
+		combiner_out_norm = _make_port_compatible(combiner_out, SIN_LAYER, target_width)
+		gf.routing.route_single(
+			circuit,
+			combiner_out_norm,
+			out_port,
+			cross_section=cs_phase,
+			radius=bend_radius,
+		)
 
 
 def generate_SC_circuit(
@@ -1044,7 +1158,10 @@ def generate_SC_circuit(
 	output_gc_dx: float = 0.0,
 	output_gc_dy: float = 0.0,
 	sc_align_gc_index: int | None = None,
-) -> gf.Component:
+	phase_mmi_shift_x: float = 200.0,
+	phase_delta_L: float = 300.0,
+	expose_gc_ports: dict[str, tuple[str, int]] | None = None,
+) -> dict:
 	"""Generate complete Star Coupler circuit with all components.
 	
 	This function creates a modular circuit that can be instantiated multiple times.
@@ -1064,7 +1181,7 @@ def generate_SC_circuit(
 		gc_pitch: Grating coupler pitch (um).
 	
 	Returns:
-		The circuit component.
+		Dict with 'component' and 'ref'.
 	"""
 	
 	# Create circuit sub-component with relative coordinates
@@ -1126,6 +1243,17 @@ def generate_SC_circuit(
 		orientation="West",
 	)
 
+	# Expose selected GC ports (1-based indices)
+	if expose_gc_ports:
+		for port_name, (kind, gc_index) in expose_gc_ports.items():
+			refs = input_gc_refs if kind == "input" else output_gc_refs
+			idx = gc_index - 1
+			if idx < 0 or idx >= len(refs):
+				raise ValueError(f"GC index {gc_index} out of range for {kind} array")
+			gc_port = list(refs[idx].ports)[0]
+			circuit.add_port(name=port_name, port=gc_port)
+
+
 	# 4. Feature-specific output routing
 	mode = feature_mode.lower()
 	if mode == "power":
@@ -1135,8 +1263,8 @@ def generate_SC_circuit(
 	elif mode == "phase":
 		_route_outputs_phase_mode(
 			circuit, sc_ports["ref"],
-			MMI_star_coupler_shift_x=200,
-			delta_L=300
+			MMI_star_coupler_shift_x=phase_mmi_shift_x,
+			delta_L=phase_delta_L
 		)
 	else:
 		raise ValueError(
@@ -1153,7 +1281,7 @@ def generate_SC_circuit(
 	circuit_ref = parent_cell << circuit
 	circuit_ref.move(origin)
 	
-	return circuit
+	return {"component": circuit, "ref": circuit_ref}
 
 
 
@@ -1200,21 +1328,35 @@ def build_from_template(
 	subdie_2 = find_subdie_cell(ref.cell, "Sub_Die_2")
 	if subdie_2:
 		# Generate complete SC circuit with relative positioning
-		generate_SC_circuit(
+		sc_main = generate_SC_circuit(
 			parent_cell=subdie_2,
 			origin=(210, 1150),  # Absolute position within Sub_Die_2
-			num_inputs=7,
-			num_outputs=6,
+			num_inputs=8,
+			num_outputs=8,
 			gc_pitch=127.0,
 			feature_mode="power",
 			output_gc_dx = -1180,
-			output_gc_dy= 390,
+			output_gc_dy= 500,
 			sc_align_gc_index=3,  # Align star coupler center with IN4 (index 3)
+			expose_gc_ports={
+				"cal_in": ("input", 7),
+				"cal_out": ("output", 7),
+			},
 		)
 
-		generate_SC_circuit(
+		# Add MZI calibration between IN7 and OUT7 of the first star coupler
+		add_mzi_calibration(
+			circuit=subdie_2,
+			input_port=sc_main["ref"].ports["cal_in"],
+			output_port=sc_main["ref"].ports["cal_out"],
+			short_length=300.0,
+			delta_L=175.0,
+			loop_side="north",
+		)
+
+		_ = generate_SC_circuit(
 			parent_cell=subdie_2,
-			origin=(210, 261),  # Absolute position within Sub_Die_2
+			origin=(210, 134),  # Absolute position within Sub_Die_2
 			num_inputs=7,
 			num_outputs=6,
 			gc_pitch=127.0,
