@@ -900,25 +900,48 @@ def _route_outputs_phase_mode(
 	b3.connect("o1", current_port)
 	current_port = b3.ports["o2"]
 	
+	print(f"[DEBUG] After b3 (turn down): pos={current_port.center}, orientation={current_port.orientation}")
+	
 	# Then go DOWN (or UP depending on the sign)
-	dy_down = (y_start + loop_height) - y_mmi
-	if dy_down > 0:
+	# Calculate distance from current Y to target Y (MMI o3)
+	# We need to account for the fact that b4 (the next bend) will shift Y by bend_radius
+	# So we need to stop BEFORE reaching y_mmi, at (y_mmi + bend_radius)
+	current_y_after_b3 = current_port.center[1]
+	target_y_before_b4 = y_mmi + bend_radius  # Stop higher so b4 brings us to y_mmi
+	dy_down = abs(current_y_after_b3 - target_y_before_b4)
+	
+	print(f"[DEBUG] Down segment: current_y={current_y_after_b3:.2f}, target_y_before_b4={target_y_before_b4:.2f}, dy_down={dy_down:.2f}")
+	
+	if dy_down > 0.1:  # Only create if meaningful length
 		s4 = circuit << gf.components.straight(length=dy_down, cross_section=cs_phase)
 		s4.connect("o1", current_port)
 		current_port = s4.ports["o2"]
+		print(f"[DEBUG] After s4 (down segment): pos={current_port.center}")
 	
 	# Segment 5: from (x_start + h1 + h3, y_mmi) to (x_mmi, y_mmi) - RIGHT to MMI
-	# Turn to go RIGHT  
-	b4 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=bend_radius)
+	# Turn to go RIGHT (from DOWN/SOUTH orientation, turn counterclockwise to EAST)
+	b4 = circuit << gf.components.bend_euler(angle=90, cross_section=cs_phase, radius=bend_radius)
 	b4.connect("o1", current_port)
 	current_port = b4.ports["o2"]
 	
-	# Final segment to MMI
-	dx_final = x_mmi - (x_start + h1 + h3)
-	if dx_final > 0:
+	print(f"[DEBUG] After b4 (turn right): pos={current_port.center}, orientation={current_port.orientation}")
+	
+	# Calculate actual 2D distance from current position to MMI o3
+	dx_final = x_mmi - current_port.center[0]
+	dy_final = y_mmi - current_port.center[1]
+	
+	print(f"[DEBUG] Final segment: current_pos={current_port.center}, target=({x_mmi}, {y_mmi})")
+	print(f"[DEBUG] Final deltas: dx={dx_final:.2f}, dy={dy_final:.2f}")
+	
+	# If there's a Y offset after the bend, we need to compensate
+	if abs(dy_final) > 0.1:
+		print(f"[WARNING] Y offset detected after b4: {dy_final:.2f} μm - routing may not be aligned")
+	
+	if dx_final > 0.1:
 		s5 = circuit << gf.components.straight(length=dx_final, cross_section=cs_phase)
 		s5.connect("o1", current_port)
 		current_port = s5.ports["o2"]
+		print(f"[DEBUG] After s5: pos={current_port.center}")
 	
 	print(f"[DEBUG] Long arm end at: {current_port.center}")
 	print(f"[DEBUG] MMI input at: {mmi_input.center}")
