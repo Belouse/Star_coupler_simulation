@@ -683,6 +683,154 @@ def add_mmi_coupler(
 	return ports_dict
 
 
+def route_with_loop(
+	circuit: gf.Component,
+	port_start: gf.Port,
+	port_end: gf.Port,
+	target_length: float,
+	loop_side: str = "north",
+	cross_section = None,
+	bend_radius: float = 25.0,
+	h1: float = 40.0,
+	h3: float = 40.0,
+	max_iterations: int = 20,
+	tolerance: float = 0.1,
+) -> gf.Port:
+	"""Route between two ports with a loop to achieve target path length.
+	
+	Args:
+		circuit: The circuit component to add routing to.
+		port_start: Starting port.
+		port_end: Ending port.
+		target_length: Target total path length (um).
+		loop_side: Direction of loop - "north" (up) or "south" (down).
+		cross_section: Cross-section for waveguides.
+		bend_radius: Bend radius (um).
+		h1: Initial straight segment before loop (um).
+		h3: Horizontal straight segment across loop (um).
+		max_iterations: Maximum iterations for loop height optimization.
+		tolerance: Acceptable length error (um).
+	
+	Returns:
+		Final port after routing.
+	"""
+	if cross_section is None:
+		cross_section = gf.cross_section.cross_section(
+			layer=port_start.layer,
+			width=port_start.width,
+			radius=bend_radius,
+		)
+	
+	# Calculate bend arc length (90° bend = pi * r / 2)
+	bend_arc_length = 3.14159 * bend_radius / 2
+	total_bend_length = 3 * bend_arc_length  # 3 bends: up/down, right, down/up
+	
+	# Direct distance
+	dx_direct = port_end.center[0] - port_start.center[0]
+	dy_direct = port_end.center[1] - port_start.center[1]
+	
+	# Binary search for optimal loop height
+	loop_height_min = 10.0
+	loop_height_max = 200.0
+	loop_height = 100.0
+	
+	for iteration in range(max_iterations):
+		# Calculate path length with current loop height
+		h2 = loop_height
+		# h4 depends on how much X distance is consumed by h1, h3, and bends
+		current_x_after_loop = port_start.center[0] + h1 + h3 + 2 * bend_radius
+		h4 = port_end.center[0] - current_x_after_loop
+		
+		# Total length
+		total_length = h1 + h2 + h3 + h4 + total_bend_length
+		
+		error = total_length - target_length
+		
+		if abs(error) < tolerance:
+			print(f"[DEBUG] route_with_loop converged: loop_height={loop_height:.2f} um, total={total_length:.2f} um (error={error:.3f} um)")
+			break
+		
+		# Adjust loop height (binary search)
+		if error > 0:  # Too long, reduce loop height
+			loop_height_max = loop_height
+			loop_height = (loop_height_min + loop_height) / 2
+		else:  # Too short, increase loop height
+			loop_height_min = loop_height
+			loop_height = (loop_height + loop_height_max) / 2
+	else:
+		print(f"[WARNING] route_with_loop did not converge after {max_iterations} iterations. Final error: {error:.3f} um")
+	
+	# Build the route with optimized loop height
+	h2 = loop_height
+	current_x_after_loop = port_start.center[0] + h1 + h3 + 2 * bend_radius
+	h4 = port_end.center[0] - current_x_after_loop
+	
+	print(f"[DEBUG] route_with_loop: h1={h1}, h2={h2:.2f}, h3={h3}, h4={h4:.2f}, bends={total_bend_length:.2f}")
+	
+	current_port = port_start
+	
+	# Segment 1: Initial straight (RIGHT)
+	if h1 > 0.1:
+		s1 = circuit << gf.components.straight(length=h1, cross_section=cross_section)
+		s1.connect("o1", current_port)
+		current_port = s1.ports["o2"]
+	
+	# Determine loop direction
+	loop_angle = 90 if loop_side == "north" else -90
+	
+	# Segment 2: Bend into loop (UP or DOWN)
+	b1 = circuit << gf.components.bend_euler(angle=loop_angle, cross_section=cross_section, radius=bend_radius)
+	b1.connect("o1", current_port)
+	current_port = b1.ports["o2"]
+	
+	# Segment 3: Vertical segment (UP or DOWN)
+	if h2 > 0.1:
+		s2 = circuit << gf.components.straight(length=h2, cross_section=cross_section)
+		s2.connect("o1", current_port)
+		current_port = s2.ports["o2"]
+	
+	# Segment 4: Bend toward destination (RIGHT)
+	b2 = circuit << gf.components.bend_euler(angle=-loop_angle, cross_section=cross_section, radius=bend_radius)
+	b2.connect("o1", current_port)
+	current_port = b2.ports["o2"]
+	
+	# Segment 5: Horizontal across loop (RIGHT)
+	if h3 > 0.1:
+		s3 = circuit << gf.components.straight(length=h3, cross_section=cross_section)
+		s3.connect("o1", current_port)
+		current_port = s3.ports["o2"]
+	
+	# Segment 6: Bend back to destination level (DOWN or UP)
+	b3 = circuit << gf.components.bend_euler(angle=-loop_angle, cross_section=cross_section, radius=bend_radius)
+	b3.connect("o1", current_port)
+	current_port = b3.ports["o2"]
+	
+	# Segment 7: Descend/ascend to destination Y (accounting for next bend offset)
+	current_y = current_port.center[1]
+	target_y_before_final_bend = port_end.center[1] + (bend_radius if loop_side == "north" else -bend_radius)
+	dy_return = abs(current_y - target_y_before_final_bend)
+	
+	if dy_return > 0.1:
+		s4 = circuit << gf.components.straight(length=dy_return, cross_section=cross_section)
+		s4.connect("o1", current_port)
+		current_port = s4.ports["o2"]
+	
+	# Segment 8: Final bend toward destination (RIGHT)
+	b4 = circuit << gf.components.bend_euler(angle=loop_angle, cross_section=cross_section, radius=bend_radius)
+	b4.connect("o1", current_port)
+	current_port = b4.ports["o2"]
+	
+	# Segment 9: Final straight to destination
+	dx_final = port_end.center[0] - current_port.center[0]
+	if dx_final > 0.1:
+		s5 = circuit << gf.components.straight(length=dx_final, cross_section=cross_section)
+		s5.connect("o1", current_port)
+		current_port = s5.ports["o2"]
+	
+	print(f"[DEBUG] route_with_loop final position: {current_port.center}")
+	return current_port
+
+
 def _route_outputs_phase_mode(
 	circuit: gf.Component,
 	star_ref: gf.ComponentReference,
@@ -738,7 +886,7 @@ def _route_outputs_phase_mode(
 	# Move MMI to final position
 	mmi_ref.move((mmi_x - temp_mmi_x, mmi_y - temp_mmi_y))
 	
-	print(f"[DEBUG] MMI repositioned: offset_x={offset_x:.2f}, offset_y={offset_y:.2f} μm")
+	print(f"[DEBUG] MMI repositioned: offset_x={offset_x:.2f}, offset_y={offset_y:.2f} um")
 	print(f"[DEBUG] MMI placed at ({mmi_x:.2f}, {mmi_y:.2f})")
 	print(f"[DEBUG] MMI o2 should be at: ({target_o2_x:.2f}, {target_o2_y:.2f})")
 	
@@ -784,11 +932,11 @@ def _route_outputs_phase_mode(
 	out2_norm = normalize_port_width(circuit, out2, target_width, length=10.0)
 	
 	# Connect OUT#2 (second) to MMI o2 (bottom) with SHORT arm (direct to MMI)
-	print(f"[DEBUG] Creating short arm: OUT#2 → MMI o2 bottom (target L={L_SHORT} μm)")
+	print(f"[DEBUG] Creating short arm: OUT#2 -> MMI o2 bottom (target L={L_SHORT} um)")
 	
 	# Calculate actual distance to MMI o2
 	dx_short = mmi_bot_port.center[0] - out2_norm.center[0]
-	print(f"[DEBUG] Short arm actual distance: {dx_short:.2f} μm")
+	print(f"[DEBUG] Short arm actual distance: {dx_short:.2f} um")
 	
 	# Create straight waveguide for short arm with ACTUAL distance
 	short_arm = gf.components.straight(length=dx_short, cross_section=cs_phase)
@@ -799,159 +947,34 @@ def _route_outputs_phase_mode(
 	print(f"[DEBUG] Short arm: OUT#2 ({out2_norm.center}) → end ({short_end.center})")
 	print(f"[DEBUG] MMI o2 at: {mmi_bot_port.center}")
 	
-	# TODO: Connect OUT#1 (top) to MMI with LONG arm (475 μm with upward loop)
-	print(f"[DEBUG] Long arm routing temporarily disabled")
+	# Connect OUT#1 (top) to MMI with LONG arm using route_with_loop
+	print(f"[DEBUG] Creating long arm with loop: OUT#1 -> MMI o3 top (target L={L_LONG} um)")
 	print(f"[DEBUG] OUT#1 at: {out1_norm.center}")
 	print(f"[DEBUG] MMI o3 (top) at: {mmi_top_port.center}")
 	
 	bend_radius = 25.0
 	
-	# Calculate bend arc length (90° bend = pi * r / 2)
-	bend_arc_length = 3.14159 * bend_radius / 2  # Quarter circle
+	# Create compatible port for MMI o3 with correct layer
+	mmi_o3_target = gf.Port(
+		name="mmi_o3_target",
+		center=mmi_top_port.center,
+		width=mmi_top_port.width,
+		orientation=mmi_top_port.orientation,
+		layer=gf.get_layer(SIN_LAYER),
+	)
 	
-	# Strategy for long arm: Create upward loop to add 175 μm
-	# Path: RIGHT → BEND UP → UP → BEND RIGHT → RIGHT → BEND DOWN → DOWN → Reach MMI
-	
-	mmi_bot_y = mmi_bot_port.center[1]
-	out1_y = out1_norm.center[1]
-	
-	# The loop height (upward detour to add extra length)
-	loop_height = 120.0  # Go up by 120 μm
-	
-	# Total bend length with 3 bends (up, right, down)
-	total_bend_length = 3 * bend_arc_length
-	
-	# Available length for straight sections
-	available_straights = L_LONG - total_bend_length
-	
-	# Horizontal distance to MMI
-	dx_to_mmi = mmi_bot_port.center[0] - out1_norm.center[0]
-	
-	# Distribute straight segments:
-	# h1: initial right before loop, h2: up the loop, h3: across loop, h4: final right to MMI
-	# h4 doit être calculé pour atteindre la position X de o3
-	h1 = 40.0
-	h2 = loop_height
-	h3 = 40.0
-	# After h1, we go at (out1_x + h1, out1_y)
-	# After loop (up, right h3, down), we're at (out1_x + h1 + h3 + 2*bend_radius, out1_y)
-	# We need to reach mmi_bot_port.x = 844.884
-	current_x_at_final = out1_norm.center[0] + h1 + h3 + 2 * bend_radius
-	h4 = mmi_bot_port.center[0] - current_x_at_final
-	
-	print(f"[DEBUG] h4 calculation: mmi_x={mmi_bot_port.center[0]}, current_x_at_final={current_x_at_final}, h4={h4}")
-	
-	print(f"[DEBUG] Long arm geometry:")
-	print(f"  - Loop height: {loop_height} μm")
-	print(f"  - dx to MMI: {dx_to_mmi} μm")
-	print(f"  - h1={h1}, h2={h2}, h3={h3}, h4={h4} μm")
-	print(f"  - Total: {h1 + h2 + h3 + h4 + total_bend_length:.2f} μm")
-	
-	# Build the path for long arm using waypoints
-	# Use the S-bend or simple routing to reach the MMI port
-	# For now, create a simple path manually with waypoints
-	
-	current_port = out1_norm
-	
-	# Calculate waypoints for the upward loop
-	x_start = out1_norm.center[0]
-	x_mmi = mmi_top_port.center[0]
-	y_start = out1_norm.center[1]
-	y_mmi = mmi_top_port.center[1]  # Use exact port position
-	print(f"[DEBUG] Y target: y_mmi={y_mmi:.3f} (MMI o3 port)")
-	
-	# Waypoints: start → right h1 → up loop → right h3 → down → MMI
-	waypoints = [
-		(x_start, y_start),
-		(x_start + h1, y_start),
-		(x_start + h1, y_start + loop_height),  # UP = y increases
-		(x_start + h1 + h3, y_start + loop_height),
-		(x_start + h1 + h3, y_mmi),
-		(x_mmi, y_mmi),
-	]
-	
-	print(f"[DEBUG] Long arm waypoints: {waypoints}")
-	
-	# Connect waypoints with straight segments and bends
-	current_port = out1_norm
-	
-	# Segment 1: from OUT#1 to (x_start + h1, y_start) - RIGHT
-	if h1 > 0:
-		s1 = circuit << gf.components.straight(length=h1, cross_section=cs_phase)
-		s1.connect("o1", current_port)
-		current_port = s1.ports["o2"]
-	
-	# Segment 2: from (x_start + h1, y_start) to (x_start + h1, y_start - loop_height) - UP
-	# Need to turn, so add bend UP first
-	b1 = circuit << gf.components.bend_euler(angle=90, cross_section=cs_phase, radius=bend_radius)
-	b1.connect("o1", current_port)
-	current_port = b1.ports["o2"]
-	
-	# Then go UP
-	s2 = circuit << gf.components.straight(length=loop_height, cross_section=cs_phase)
-	s2.connect("o1", current_port)
-	current_port = s2.ports["o2"]
-	
-	# Segment 3: from (x_start + h1, y_start - loop_height) to (x_start + h1 + h3, y_start - loop_height) - RIGHT
-	# Turn to go RIGHT
-	b2 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=bend_radius)
-	b2.connect("o1", current_port)
-	current_port = b2.ports["o2"]
-	
-	# Then go RIGHT
-	if h3 > 0:
-		s3 = circuit << gf.components.straight(length=h3, cross_section=cs_phase)
-		s3.connect("o1", current_port)
-		current_port = s3.ports["o2"]
-	
-	# Segment 4: from (x_start + h1 + h3, y_start + loop_height) to (x_start + h1 + h3, y_mmi) - DOWN
-	# Turn to go DOWN
-	b3 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=bend_radius)
-	b3.connect("o1", current_port)
-	current_port = b3.ports["o2"]
-	
-	print(f"[DEBUG] After b3 (turn down): pos={current_port.center}, orientation={current_port.orientation}")
-	
-	# Then go DOWN (or UP depending on the sign)
-	# Calculate distance from current Y to target Y (MMI o3)
-	# We need to account for the fact that b4 (the next bend) will shift Y by bend_radius
-	# So we need to stop BEFORE reaching y_mmi, at (y_mmi + bend_radius)
-	current_y_after_b3 = current_port.center[1]
-	target_y_before_b4 = y_mmi + bend_radius  # Stop higher so b4 brings us to y_mmi
-	dy_down = abs(current_y_after_b3 - target_y_before_b4)
-	
-	print(f"[DEBUG] Down segment: current_y={current_y_after_b3:.2f}, target_y_before_b4={target_y_before_b4:.2f}, dy_down={dy_down:.2f}")
-	
-	if dy_down > 0.1:  # Only create if meaningful length
-		s4 = circuit << gf.components.straight(length=dy_down, cross_section=cs_phase)
-		s4.connect("o1", current_port)
-		current_port = s4.ports["o2"]
-		print(f"[DEBUG] After s4 (down segment): pos={current_port.center}")
-	
-	# Segment 5: from (x_start + h1 + h3, y_mmi) to (x_mmi, y_mmi) - RIGHT to MMI
-	# Turn to go RIGHT (from DOWN/SOUTH orientation, turn counterclockwise to EAST)
-	b4 = circuit << gf.components.bend_euler(angle=90, cross_section=cs_phase, radius=bend_radius)
-	b4.connect("o1", current_port)
-	current_port = b4.ports["o2"]
-	
-	print(f"[DEBUG] After b4 (turn right): pos={current_port.center}, orientation={current_port.orientation}")
-	
-	# Calculate actual 2D distance from current position to MMI o3
-	dx_final = x_mmi - current_port.center[0]
-	dy_final = y_mmi - current_port.center[1]
-	
-	print(f"[DEBUG] Final segment: current_pos={current_port.center}, target=({x_mmi}, {y_mmi})")
-	print(f"[DEBUG] Final deltas: dx={dx_final:.2f}, dy={dy_final:.2f}")
-	
-	# If there's a Y offset after the bend, we need to compensate
-	if abs(dy_final) > 0.1:
-		print(f"[WARNING] Y offset detected after b4: {dy_final:.2f} μm - routing may not be aligned")
-	
-	if dx_final > 0.1:
-		s5 = circuit << gf.components.straight(length=dx_final, cross_section=cs_phase)
-		s5.connect("o1", current_port)
-		current_port = s5.ports["o2"]
-		print(f"[DEBUG] After s5: pos={current_port.center}")
+	# Route with upward loop to achieve L_LONG path length
+	current_port = route_with_loop(
+		circuit=circuit,
+		port_start=out1_norm,
+		port_end=mmi_o3_target,
+		target_length=L_LONG,
+		loop_side="north",
+		cross_section=cs_phase,
+		bend_radius=bend_radius,
+		h1=40.0,
+		h3=40.0,
+	)
 	
 	print(f"[DEBUG] Long arm end at: {current_port.center}")
 	print(f"[DEBUG] MMI input at: {mmi_input.center}")
