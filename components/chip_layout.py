@@ -971,7 +971,6 @@ def _route_single_phase_mzi(
 	circuit: gf.Component,
 	out_long_port: gf.Port,
 	out_short_port: gf.Port,
-	gc_output_port: gf.Port,
 	MMI_shift_x: float = 0.0,
 	MMI_shift_y: float = 0.0,
 	delta_L: float = 175.0,
@@ -979,13 +978,12 @@ def _route_single_phase_mzi(
 	bend_radius: float = 25.0,
 	h1: float = 50.0,
 	h3: float = 20.0,
-) -> None:
-	"""Route a single MZI pair (long/short arms) and connect to GC output.
+) -> gf.Port | None:
+	"""Route a single MZI pair (long/short arms) and return MMI output port.
 	
 	Args:
 		out_long_port: Long arm output from star coupler.
 		out_short_port: Short arm output from star coupler.
-		gc_output_port: GC port to route to.
 		loop_side: Direction of loop ("north" or "south").
 	"""
 	target_width = 0.75
@@ -1009,12 +1007,13 @@ def _route_single_phase_mzi(
 		short_start = port_bottom
 		long_start = port_top
 
-	# Place MMI aligned to short arm port
+	# Place MMI aligned to the correct input port for the short arm
+	align_port_name = "o2" if short_start is port_bottom else "o3"
 	try:
 		mmi_ref, mmi_ports = place_mmi_aligned_to_port(
 			circuit=circuit,
 			target_port=short_start,
-			align_port_name="o2",
+			align_port_name=align_port_name,
 			shift_x=MMI_shift_x,
 			shift_y=MMI_shift_y,
 			rotation=180.0,
@@ -1057,28 +1056,20 @@ def _route_single_phase_mzi(
 		h3=h3,
 	)
 
-	# Connect MMI output to GC port
+	# Provide MMI output port to caller for bundle routing
 	mmi_single_out_port = mmi_ports.get("o1", None)
 	if not mmi_single_out_port:
 		print("[ERROR] MMI output port o1 not found")
-		return
-	
+		return None
+
 	mmi_out_compatible = _make_port_compatible(mmi_single_out_port, SIN_LAYER, target_width)
-	gc_out_compatible = _make_port_compatible(gc_output_port, SIN_LAYER, target_width)
-	
-	gf.routing.route_single(
-		circuit,
-		gc_out_compatible,
-		mmi_out_compatible,
-		cross_section=cs_phase,
-		radius=bend_radius,
-		auto_taper=False,
-	)
 
 	print(
 		f"[DEBUG] Phase MZI: L_SHORT={result['L_SHORT']} um, "
 		f"L_LONG={result['L_LONG']} um, delta_L={delta_L} um, loop={loop_side}"
 	)
+
+	return mmi_out_compatible
 
 
 def _route_outputs_phase_mode(
@@ -1128,35 +1119,30 @@ def _route_outputs_phase_mode(
 		print("[ERROR] gc_output_refs must be provided")
 		return
 
+	# Collect MMI output ports for bundle routing
+	mmi_out_ports: list[gf.Port] = []
+
 	# Process each pair
 	for pair_idx, (out_idx_long, out_idx_short) in enumerate(output_pairs):
 		# Validate indices
 		if out_idx_long >= len(output_ports) or out_idx_short >= len(output_ports):
 			print(f"[WARN] Output pair indices {(out_idx_long, out_idx_short)} out of range")
 			continue
-		
-		# Get GC output index for this pair
-		gc_idx = gc_output_indices[pair_idx] if pair_idx < len(gc_output_indices) else gc_output_indices[-1]
-		if gc_idx >= len(gc_output_refs):
-			print(f"[WARN] GC output index {gc_idx} out of range")
-			continue
-		
+
 		# Get ports
 		out_long = output_ports[out_idx_long]
 		out_short = output_ports[out_idx_short]
-		gc_output_port = list(gc_output_refs[gc_idx].ports)[0]
 		
 		# Alternate loop direction: north for even pairs, south for odd
 		loop_side = "north" if pair_idx % 2 == 0 else "south"
 		
-		print(f"[DEBUG] Phase MZI pair {pair_idx}: SC[{out_idx_long},{out_idx_short}] -> GC[{gc_idx}] (loop={loop_side})")
+		print(f"[DEBUG] Phase MZI pair {pair_idx}: SC[{out_idx_long},{out_idx_short}] (loop={loop_side})")
 		
 		# Route this MZI
-		_route_single_phase_mzi(
+		mmi_out = _route_single_phase_mzi(
 			circuit=circuit,
 			out_long_port=out_long,
 			out_short_port=out_short,
-			gc_output_port=gc_output_port,
 			MMI_shift_x=MMI_star_coupler_shift_x,
 			MMI_shift_y=MMI_star_coupler_shift_y,
 			delta_L=delta_L,
@@ -1165,6 +1151,60 @@ def _route_outputs_phase_mode(
 			h1=50.0,
 			h3=20.0,
 		)
+		if mmi_out is not None:
+			mmi_out_ports.append(mmi_out)
+
+	# Route MMI outputs to GC outputs as a bundle (avoid overlaps)
+	if not mmi_out_ports:
+		print("[WARN] No MMI outputs to route")
+		return
+
+	# Build GC output port list
+	if gc_output_indices is None:
+		# Auto: top-to-bottom order
+		gc_ports_sorted = sorted(
+			[list(ref.ports)[0] for ref in gc_output_refs],
+			key=lambda p: p.center[1],
+			reverse=True,
+		)
+		gc_ports = gc_ports_sorted[:len(mmi_out_ports)]
+		mmi_ports_ordered = sorted(mmi_out_ports, key=lambda p: p.center[1], reverse=True)
+		sort_ports = False
+	else:
+		gc_ports = []
+		for idx in gc_output_indices[:len(mmi_out_ports)]:
+			if idx >= len(gc_output_refs):
+				print(f"[WARN] GC output index {idx} out of range")
+				continue
+			gc_ports.append(list(gc_output_refs[idx].ports)[0])
+		mmi_ports_ordered = mmi_out_ports
+		sort_ports = False
+
+	if len(gc_ports) != len(mmi_ports_ordered):
+		print("[WARN] Mismatch between MMI outputs and GC outputs for bundle routing")
+		return
+
+	# Normalize GC ports to SIN layer
+	gc_ports_compatible = [
+		_make_port_compatible(p, SIN_LAYER, 0.75) for p in gc_ports
+	]
+
+	cs_phase = gf.cross_section.cross_section(
+		layer=SIN_LAYER,
+		width=0.75,
+		radius=25.0,
+	)
+
+	gf.routing.route_bundle(
+		circuit,
+		mmi_ports_ordered,
+		gc_ports_compatible,
+		cross_section=cs_phase,
+		radius=25.0,
+		separation=10.0,
+		sort_ports=sort_ports,
+		auto_taper=False,
+	)
 
 
 
@@ -1513,7 +1553,7 @@ def build_from_template(
 			output_gc_dy= 390,
 			phase_delta_L=300.0,
 			phase_output_pairs=[(0, 1), (2, 3)],  # Two MZI pairs: top two and center two
-			phase_gc_indices=[5, 3],  # Route to GC outputs 5 and 3
+			phase_gc_indices=[4, 3],
 		)
 		# Add another SC circuit instance at different position if needed
 
