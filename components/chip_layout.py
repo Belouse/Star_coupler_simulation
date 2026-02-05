@@ -1066,6 +1066,8 @@ def add_mzi_calibration(
 	h3: float = 20.0,
 	input_extension: float = 20.0,
 	output_extension: float = 20.0,
+	input_mmi_shift_x: float = 0.0,
+	input_mmi_shift_y: float = 0.0,
 ) -> None:
 	"""Add a standalone MZI calibration using two MMIs."""
 	target_width = 0.75
@@ -1084,11 +1086,29 @@ def add_mzi_calibration(
 	if output_extension > 0:
 		out_port = extend_port(circuit, out_port, output_extension)
 
-	# Splitter MMI (o1 as input)
-	splitter = ubcpdk.cells.ANT_MMI_1x2_te1550_3dB_BB()
-	splitter_ref = circuit << splitter
-	splitter_ref.connect("o1", in_port)
-	splitter_ports = {p.name: p for p in splitter_ref.ports}
+	# Splitter MMI (o1 as input), positioned relative to IN7 GC
+	splitter_ref, splitter_ports = place_mmi_aligned_to_port(
+		circuit=circuit,
+		target_port=in_port,
+		align_port_name="o1",
+		shift_x=input_mmi_shift_x,
+		shift_y=input_mmi_shift_y,
+		rotation=0.0,
+	)
+	splitter_in = splitter_ports.get("o1")
+	if splitter_in:
+		splitter_in_norm = _make_port_compatible(splitter_in, SIN_LAYER, target_width)
+		gf.routing.route_single(
+			circuit,
+			splitter_in_norm,
+			in_port,
+			cross_section=cs_phase,
+			radius=bend_radius,
+			auto_taper=False,
+		)
+	else:
+		print("[ERROR] Splitter MMI port o1 not found")
+		return
 	sp_o2 = splitter_ports.get("o2")
 	sp_o3 = splitter_ports.get("o3")
 	if not sp_o2 or not sp_o3:
@@ -1145,6 +1165,7 @@ def add_mzi_calibration(
 			out_port,
 			cross_section=cs_phase,
 			radius=bend_radius,
+			auto_taper=False,
 		)
 
 
@@ -1344,7 +1365,7 @@ def build_from_template(
 			},
 		)
 
-		# Add MZI calibration between IN7 and OUT7 of the first star coupler
+		# Add MZI calibration between IN7 and OUT7 of the first star coupler 
 		add_mzi_calibration(
 			circuit=subdie_2,
 			input_port=sc_main["ref"].ports["cal_in"],
