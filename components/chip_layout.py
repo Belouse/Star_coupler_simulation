@@ -741,7 +741,10 @@ def _route_outputs_phase_mode(
 	print(f"[DEBUG] MMI repositioned: offset_x={offset_x:.2f}, offset_y={offset_y:.2f} μm")
 	print(f"[DEBUG] MMI placed at ({mmi_x:.2f}, {mmi_y:.2f})")
 	print(f"[DEBUG] MMI o2 should be at: ({target_o2_x:.2f}, {target_o2_y:.2f})")
-	print(f"[DEBUG] MMI ports: {[(p.name, p.center) for p in mmi_data['ports']]}")
+	
+	# Update port positions after move
+	mmi_ports = {p.name: p for p in mmi_ref.ports}
+	print(f"[DEBUG] MMI ports after move: {[(p.name, p.center) for p in mmi_ref.ports]}")
 	print(f"[DEBUG] OUT#1 at: {out1.center}")
 	print(f"[DEBUG] OUT#2 at: {out2.center}")
 	
@@ -754,9 +757,15 @@ def _route_outputs_phase_mode(
 	mmi_input = mmi_ports["o1"]
 	
 	# Identify MMI input ports (o2 and o3 are the two inputs when used in reverse mode)
-	# o3 is the TOP input, o2 is the BOTTOM input
-	mmi_top_port = mmi_ports.get("o3", None)
-	mmi_bot_port = mmi_ports.get("o2", None)
+	# Use actual Y positions to determine top/bottom (robust to rotations)
+	port_o2 = mmi_ports.get("o2", None)
+	port_o3 = mmi_ports.get("o3", None)
+	if port_o2 and port_o3:
+		mmi_top_port = max([port_o2, port_o3], key=lambda p: p.center[1])
+		mmi_bot_port = min([port_o2, port_o3], key=lambda p: p.center[1])
+	else:
+		mmi_top_port = port_o3
+		mmi_bot_port = port_o2	
 	
 	# Create cross-section for phase mode routing
 	cs_phase = gf.cross_section.cross_section(
@@ -774,15 +783,15 @@ def _route_outputs_phase_mode(
 	out1_norm = normalize_port_width(circuit, out1, target_width, length=10.0)
 	out2_norm = normalize_port_width(circuit, out2, target_width, length=10.0)
 	
-	# Connect OUT#2 (second) to MMI o2 (bottom) with SHORT arm (300 μm direct)
-	print(f"[DEBUG] Creating short arm: OUT#2 → MMI o2 bottom (L={L_SHORT} μm)")
+	# Connect OUT#2 (second) to MMI o2 (bottom) with SHORT arm (direct to MMI)
+	print(f"[DEBUG] Creating short arm: OUT#2 → MMI o2 bottom (target L={L_SHORT} μm)")
 	
-	# Calculate distance to MMI o2
+	# Calculate actual distance to MMI o2
 	dx_short = mmi_bot_port.center[0] - out2_norm.center[0]
-	print(f"[DEBUG] Short arm distance: {dx_short:.2f} μm")
+	print(f"[DEBUG] Short arm actual distance: {dx_short:.2f} μm")
 	
-	# Create straight waveguide for short arm
-	short_arm = gf.components.straight(length=L_SHORT, cross_section=cs_phase)
+	# Create straight waveguide for short arm with ACTUAL distance
+	short_arm = gf.components.straight(length=dx_short, cross_section=cs_phase)
 	short_ref = circuit << short_arm
 	short_ref.connect("o1", out2_norm)
 	
@@ -848,7 +857,8 @@ def _route_outputs_phase_mode(
 	x_start = out1_norm.center[0]
 	x_mmi = mmi_top_port.center[0]
 	y_start = out1_norm.center[1]
-	y_mmi = mmi_top_port.center[1]
+	y_mmi = mmi_top_port.center[1]  # Use exact port position
+	print(f"[DEBUG] Y target: y_mmi={y_mmi:.3f} (MMI o3 port)")
 	
 	# Waypoints: start → right h1 → up loop → right h3 → down → MMI
 	waypoints = [
@@ -963,10 +973,31 @@ def _route_outputs_phase_mode(
 	if mmi_top_port:
 		print(f"[DEBUG] MMI o3 port layer: {mmi_top_port.layer}, width: {mmi_top_port.width}")
 	
-	# Simply note the connections for now - they'll be visualized in GDS
-	print(f"[DEBUG] Need to connect:")
-	print(f"  - Short arm end ({short_end_port.center}) to MMI o2 ({mmi_bot_port.center if mmi_bot_port else 'N/A'})")
-	print(f"  - Long arm end ({current_port.center}) to MMI o3 ({mmi_top_port.center if mmi_top_port else 'N/A'})")
+	# Verify final connections and add connector segments if needed
+	print(f"[DEBUG] Final arm positions:")
+	print(f"  - Short arm end: {short_end_port.center}")
+	print(f"  - MMI o2 target: {mmi_bot_port.center if mmi_bot_port else 'N/A'}")
+	print(f"  - Long arm end: {current_port.center}")
+	print(f"  - MMI o3 target: {mmi_top_port.center if mmi_top_port else 'N/A'}")
+	
+	# Add connector segments to close gaps
+	# Short arm connector
+	if mmi_bot_port:
+		dx_short_gap = abs(mmi_bot_port.center[0] - short_end_port.center[0])
+		if dx_short_gap > 0.1:
+			print(f"[DEBUG] Adding short arm connector: {dx_short_gap:.3f} μm")
+			short_connector = circuit << gf.components.straight(length=dx_short_gap, cross_section=cs_phase)
+			short_connector.connect("o1", short_end_port)
+	
+	# Long arm connector
+	if mmi_top_port:
+		dx_long_gap = abs(mmi_top_port.center[0] - current_port.center[0])
+		if dx_long_gap > 0.1:
+			print(f"[DEBUG] Adding long arm connector: {dx_long_gap:.3f} μm")
+			long_connector = circuit << gf.components.straight(length=dx_long_gap, cross_section=cs_phase)
+			long_connector.connect("o1", current_port)
+	
+	print(f"[DEBUG] Arms connected to MMI ports")
 
 
 
