@@ -973,6 +973,7 @@ def _route_outputs_phase_mode(
 	MMI_star_coupler_shift_x: float = 0.0,
 	MMI_star_coupler_shift_y: float = 0.0,
 	delta_L: float = 175.0,
+	output_ports_ref: list | None = None,
 ) -> None:
 	"""Interfere star coupler outputs pairwise (phase mode).
 
@@ -1046,6 +1047,23 @@ def _route_outputs_phase_mode(
 		h1=50.0,
 		h3=20.0,
 	)
+
+	# Connect the MMI output port o1 to the GC ports
+	mmi_single_out_port = mmi_ports.get("o1", None)
+	
+	# adapt output_ports_ref to be compatible with SIN layer and target width
+	mmi_single_out_port_compatible = _make_port_compatible(mmi_single_out_port, SIN_LAYER, target_width) 
+	
+
+	combiner_out_norm = _make_port_compatible(output_ports_ref, SIN_LAYER, target_width)
+	gf.routing.route_single(
+		circuit,
+		combiner_out_norm,
+		mmi_single_out_port_compatible,
+		cross_section=cs_phase,
+		radius=25.0,
+	)
+
 
 	print(
 		f"[DEBUG] Phase mode lengths: L_SHORT={result['L_SHORT']} um, "
@@ -1186,6 +1204,7 @@ def generate_SC_circuit(
 	phase_mmi_shift_x: float = 200.0,
 	phase_delta_L: float = 300.0,
 	expose_gc_ports: dict[str, tuple[str, int]] | None = None,
+	gc_output_port_index_phase: int = 1,
 ) -> dict:
 	"""Generate complete Star Coupler circuit with all components.
 	
@@ -1289,7 +1308,8 @@ def generate_SC_circuit(
 		_route_outputs_phase_mode(
 			circuit, sc_ports["ref"],
 			MMI_star_coupler_shift_x=phase_mmi_shift_x,
-			delta_L=phase_delta_L
+			delta_L=phase_delta_L,
+			output_ports_ref=output_gc_refs[gc_output_port_index_phase].ports["o1"],
 		)
 	else:
 		raise ValueError(
@@ -1390,6 +1410,7 @@ def build_from_template(
 			output_gc_dx = -1180,
 			output_gc_dy= 390,
 			phase_delta_L=300.0,
+			gc_output_port_index_phase = 5,
 		)
 		# Add another SC circuit instance at different position if needed
 
