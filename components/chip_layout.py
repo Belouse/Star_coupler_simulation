@@ -1077,19 +1077,23 @@ def add_mzi_calibration(
 		radius=bend_radius,
 	)
 
-	# Normalize and extend ports from GC
-	in_port = normalize_port_width(circuit, input_port, target_width, length=10.0)
+	# Normalize and extend ports from GC (force SiN layer)
+	in_port_base = _make_port_compatible(input_port, SIN_LAYER, input_port.width)
+	in_port = normalize_port_width(circuit, in_port_base, target_width, length=10.0)
 	if input_extension > 0:
 		in_port = extend_port(circuit, in_port, input_extension)
+	in_port_sin = _make_port_compatible(in_port, SIN_LAYER, target_width)
 
-	out_port = normalize_port_width(circuit, output_port, target_width, length=10.0)
+	out_port_base = _make_port_compatible(output_port, SIN_LAYER, output_port.width)
+	out_port = normalize_port_width(circuit, out_port_base, target_width, length=10.0)
 	if output_extension > 0:
 		out_port = extend_port(circuit, out_port, output_extension)
+	out_port_sin = _make_port_compatible(out_port, SIN_LAYER, target_width)
 
 	# Splitter MMI (o1 as input), positioned relative to IN7 GC
 	splitter_ref, splitter_ports = place_mmi_aligned_to_port(
 		circuit=circuit,
-		target_port=in_port,
+		target_port=in_port_sin,
 		align_port_name="o1",
 		shift_x=input_mmi_shift_x,
 		shift_y=input_mmi_shift_y,
@@ -1101,7 +1105,7 @@ def add_mzi_calibration(
 		gf.routing.route_single(
 			circuit,
 			splitter_in_norm,
-			in_port,
+			in_port_sin,
 			cross_section=cs_phase,
 			radius=bend_radius,
 			auto_taper=False,
@@ -1162,7 +1166,7 @@ def add_mzi_calibration(
 		gf.routing.route_single(
 			circuit,
 			combiner_out_norm,
-			out_port,
+			out_port_sin,
 			cross_section=cs_phase,
 			radius=bend_radius,
 			auto_taper=False,
@@ -1349,7 +1353,7 @@ def build_from_template(
 	subdie_2 = find_subdie_cell(ref.cell, "Sub_Die_2")
 	if subdie_2:
 		# Generate complete SC circuit with relative positioning
-		sc_main = generate_SC_circuit(
+		sc_power = generate_SC_circuit(
 			parent_cell=subdie_2,
 			origin=(210, 1150),  # Absolute position within Sub_Die_2
 			num_inputs=8,
@@ -1368,14 +1372,15 @@ def build_from_template(
 		# Add MZI calibration between IN7 and OUT7 of the first star coupler 
 		add_mzi_calibration(
 			circuit=subdie_2,
-			input_port=sc_main["ref"].ports["cal_in"],
-			output_port=sc_main["ref"].ports["cal_out"],
+			input_port=sc_power["ref"].ports["cal_in"],
+			output_port=sc_power["ref"].ports["cal_out"],
 			short_length=300.0,
 			delta_L=175.0,
 			loop_side="north",
+			input_extension=200
 		)
 
-		_ = generate_SC_circuit(
+		SC_phase = generate_SC_circuit(
 			parent_cell=subdie_2,
 			origin=(210, 134),  # Absolute position within Sub_Die_2
 			num_inputs=7,
