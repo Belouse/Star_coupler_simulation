@@ -649,17 +649,79 @@ def _route_outputs_amplitude_same_length_mode(
 	_ = (circuit, star_ref, output_gc_refs)
 
 
+def add_mmi_coupler(
+	circuit: gf.Component,
+	position: tuple[float, float] = (0, 0),
+	rotation: float = 0.0,
+) -> dict:
+	"""Add MMI 1x2 coupler to circuit.
+	
+	Args:
+		circuit: The circuit component.
+		position: Position (x, y) for the MMI center.
+		rotation: Rotation angle in degrees.
+	
+	Returns:
+		Dict with 'ref' and 'ports' (input and output ports).
+	"""
+	mmi = ubcpdk.cells.ANT_MMI_1x2_te1550_3dB_BB()
+	mmi_ref = circuit << mmi
+	
+	# Position and rotate
+	if rotation != 0:
+		mmi_ref.rotate(rotation)
+	mmi_ref.move(position)
+	
+	# Extract ports (convert to list)
+	all_ports = [port for port in mmi_ref.ports]
+	
+	ports_dict = {
+		"ref": mmi_ref,
+		"ports": all_ports,
+	}
+	
+	return ports_dict
+
+
 def _route_outputs_phase_mode(
 	circuit: gf.Component,
 	star_ref: gf.ComponentReference,
+	star_coupler_shift_x: float = 000.0,
+	star_coupler_shift_y: float = 0.0,
 ) -> None:
 	"""Interfere star coupler outputs pairwise (phase mode).
 
-	Pairs: 1vs2, 2vs3, 3vs4.
-	TODO: Implement interferometer/combiner routing for these pairs.
+	Architecture:
+	- OUT#1 (top) → short arm (300 μm) → MMI input bottom
+	- OUT#2 (2nd)  → long arm (475 μm) → MMI input top
+	- MMI outputs → to GCs (later)
 	"""
-	# TODO: Insert interferometers (1vs2, 2vs3, 3vs4)
-	_ = (circuit, star_ref)
+	# Get star coupler output ports
+	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
+	if len(output_ports) < 2:
+		print("[WARN] Phase mode needs at least 2 output ports")
+		return
+	
+	# Sort top to bottom
+	output_ports.sort(key=lambda p: p.center[1], reverse=True)
+	out1 = output_ports[0]  # Top
+	out2 = output_ports[1]  # Second from top
+	
+	# Calculate MMI position (to the right of star coupler outputs)
+	mmi_x = out1.center[0] + star_coupler_shift_x
+	mmi_y = (out1.center[1] + out2.center[1]) / 2.0 + star_coupler_shift_y # Between the two ports
+	
+	# Add MMI coupler
+	mmi_data = add_mmi_coupler(
+		circuit,
+		position=(mmi_x, mmi_y),
+		rotation=0.0,
+	)
+	
+	print(f"[DEBUG] MMI placed at ({mmi_x:.2f}, {mmi_y:.2f})")
+	print(f"[DEBUG] MMI ports: {[p.name for p in mmi_data['ports']]}")
+	print(f"[DEBUG] OUT#1 at: {out1.center}")
+	print(f"[DEBUG] OUT#2 at: {out2.center}")
 
 
 def generate_SC_circuit(
