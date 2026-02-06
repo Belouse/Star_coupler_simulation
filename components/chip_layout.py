@@ -1220,7 +1220,7 @@ def _route_outputs_phase_mode(
 
 
 def add_mzi_calibration(
-	circuit: gf.Component,
+	parent_cell: gf.Component,
 	input_port: gf.Port,
 	output_port: gf.Port,
 	short_length: float = 300.0,
@@ -1233,8 +1233,12 @@ def add_mzi_calibration(
 	output_extension: float = 20.0,
 	input_mmi_shift_x: float = 0.0,
 	input_mmi_shift_y: float = 0.0,
-) -> None:
-	"""Add a standalone MZI calibration using two MMIs."""
+) -> gf.ComponentReference:
+	"""Add a standalone MZI calibration using two MMIs as an independent component."""
+	# Create independent MZI circuit
+	unique_id = str(uuid.uuid4())[:8]
+	mzi_circuit = gf.Component(f"mzi_calibration_{unique_id}")
+	
 	target_width = 0.75
 	cs_phase = gf.cross_section.cross_section(
 		layer=SIN_LAYER,
@@ -1244,20 +1248,20 @@ def add_mzi_calibration(
 
 	# Normalize and extend ports from GC (force SiN layer)
 	in_port_base = _make_port_compatible(input_port, SIN_LAYER, input_port.width)
-	in_port = normalize_port_width(circuit, in_port_base, target_width, length=10.0)
+	in_port = normalize_port_width(mzi_circuit, in_port_base, target_width, length=10.0)
 	if input_extension > 0:
-		in_port = extend_port(circuit, in_port, input_extension)
+		in_port = extend_port(mzi_circuit, in_port, input_extension)
 	in_port_sin = _make_port_compatible(in_port, SIN_LAYER, target_width)
 
 	out_port_base = _make_port_compatible(output_port, SIN_LAYER, output_port.width)
-	out_port = normalize_port_width(circuit, out_port_base, target_width, length=10.0)
+	out_port = normalize_port_width(mzi_circuit, out_port_base, target_width, length=10.0)
 	if output_extension > 0:
-		out_port = extend_port(circuit, out_port, output_extension)
+		out_port = extend_port(mzi_circuit, out_port, output_extension)
 	out_port_sin = _make_port_compatible(out_port, SIN_LAYER, target_width)
 
 	# Splitter MMI (o1 as input), positioned relative to IN7 GC
 	splitter_ref, splitter_ports = place_mmi_aligned_to_port(
-		circuit=circuit,
+		circuit=mzi_circuit,
 		target_port=in_port_sin,
 		align_port_name="o1",
 		shift_x=input_mmi_shift_x,
@@ -1268,7 +1272,7 @@ def add_mzi_calibration(
 	if splitter_in:
 		splitter_in_norm = _make_port_compatible(splitter_in, SIN_LAYER, target_width)
 		gf.routing.route_single(
-			circuit,
+			mzi_circuit,
 			splitter_in_norm,
 			in_port_sin,
 			cross_section=cs_phase,
@@ -1277,18 +1281,18 @@ def add_mzi_calibration(
 		)
 	else:
 		print("[ERROR] Splitter MMI port o1 not found")
-		return
+		return None
 	sp_o2 = splitter_ports.get("o2")
 	sp_o3 = splitter_ports.get("o3")
 	if not sp_o2 or not sp_o3:
 		print("[ERROR] Splitter MMI ports o2/o3 not found")
-		return
+		return None
 	sp_top = max([sp_o2, sp_o3], key=lambda p: p.center[1])
 	sp_bot = min([sp_o2, sp_o3], key=lambda p: p.center[1])
 
 	# Combiner MMI aligned to short arm length
 	combiner_ref, combiner_ports = place_mmi_aligned_to_port(
-		circuit=circuit,
+		circuit=mzi_circuit,
 		target_port=sp_bot,
 		align_port_name="o2",
 		shift_x=short_length,
@@ -1299,7 +1303,7 @@ def add_mzi_calibration(
 	cb_o3 = combiner_ports.get("o3")
 	if not cb_o2 or not cb_o3:
 		print("[ERROR] Combiner MMI ports o2/o3 not found")
-		return
+		return None
 	cb_top = max([cb_o2, cb_o3], key=lambda p: p.center[1])
 	cb_bot = min([cb_o2, cb_o3], key=lambda p: p.center[1])
 
@@ -1310,7 +1314,7 @@ def add_mzi_calibration(
 	cb_bot_norm = _make_port_compatible(cb_bot, SIN_LAYER, target_width)
 
 	route_arms_to_mmi(
-		circuit=circuit,
+		circuit=mzi_circuit,
 		short_start=sp_bot_norm,
 		long_start=sp_top_norm,
 		mmi_top_port=cb_top_norm,
@@ -1329,13 +1333,17 @@ def add_mzi_calibration(
 	if combiner_out:
 		combiner_out_norm = _make_port_compatible(combiner_out, SIN_LAYER, target_width)
 		gf.routing.route_single(
-			circuit,
+			mzi_circuit,
 			combiner_out_norm,
 			out_port_sin,
 			cross_section=cs_phase,
 			radius=bend_radius,
 			auto_taper=False,
 		)
+	
+	# Add the MZI circuit to the parent cell
+	mzi_ref = parent_cell << mzi_circuit
+	return mzi_ref
 
 
 def add_material_loss_calibration(
@@ -1831,7 +1839,7 @@ def build_from_template(
 
 		# Add MZI calibration between IN7 and OUT7 of the first star coupler 
 		add_mzi_calibration(
-			circuit=subdie_2,
+			parent_cell=subdie_2,
 			input_port=sc_power["ref"].ports["cal_in"],
 			output_port=sc_power["ref"].ports["cal_out"],
 			short_length=300.0,
@@ -1900,18 +1908,6 @@ def build_from_template(
 			orientation="west",
 		)
 
-		add_material_loss_calibration(
-			circuit=subdie_2,
-			input_gc_origin=(210, -800),  # Absolute position within Sub_Die_2
-			waveguide_length=1000.0,
-			waveguide_width=0.75,
-			waveguide_layer=SIN_LAYER,
-			bend_radius=25.0,
-			gc_spacing=127.0,
-			input_extension=20.0,
-			output_extension=20.0,
-			
-		)
 
 
 
