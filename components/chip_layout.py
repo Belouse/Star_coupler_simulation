@@ -7,6 +7,7 @@ export to output/gds.
 from __future__ import annotations
 from pathlib import Path
 import warnings
+import uuid
 import gdsfactory as gf
 import ubcpdk
 
@@ -1479,8 +1480,9 @@ def add_waveguide_loop_reference(
 		radius=bend_radius,
 	)
 	
-	# Create separate circuit for the loop
-	loop_circuit = gf.Component("waveguide_loop_reference")
+	# Create separate circuit for the loop with unique name
+	unique_id = str(uuid.uuid4())[:8]
+	loop_circuit = gf.Component(f"waveguide_loop_ref_{unique_id}")
 	
 	# Normalize and prepare input port
 	in_port_base = _make_port_compatible(input_port, waveguide_layer, input_port.width)
@@ -1876,7 +1878,7 @@ def build_from_template(
 		)
 		
 		# Add waveguide loop reference connecting input_1 and output_1
-		c1 = add_waveguide_loop_reference(
+		calib_1 = add_waveguide_loop_reference(
 			parent_cell=subdie_2,
 			input_port=SC_phase_2["ref"].ports["input_1"],
 			output_port=SC_phase_2["ref"].ports["output_1"],
@@ -1885,6 +1887,30 @@ def build_from_template(
 			waveguide_layer=SIN_LAYER,
 			bend_radius=25.0,
 			orientation="west",
+		)
+
+		calib_2 = add_waveguide_loop_reference(
+			parent_cell=subdie_2,
+			input_port=SC_phase_2["ref"].ports["input_2"],
+			output_port=SC_phase_2["ref"].ports["output_2"],
+			total_length=700.0,
+			waveguide_width=0.75,
+			waveguide_layer=SIN_LAYER,
+			bend_radius=25.0,
+			orientation="west",
+		)
+
+		add_material_loss_calibration(
+			circuit=subdie_2,
+			input_gc_origin=(210, -800),  # Absolute position within Sub_Die_2
+			waveguide_length=1000.0,
+			waveguide_width=0.75,
+			waveguide_layer=SIN_LAYER,
+			bend_radius=25.0,
+			gc_spacing=127.0,
+			input_extension=20.0,
+			output_extension=20.0,
+			
 		)
 
 
