@@ -114,8 +114,9 @@ def _add_grating_coupler_array(
 		gc_ref = circuit << gc
 		x_pos = origin[0] + i * config["dx"]
 		y_pos = origin[1] + i * config["dy"]
-		gc_ref.move((x_pos, y_pos))
+		# Rotate first so the placement order stays consistent for all orientations
 		gc_ref.rotate(config["angle"])
+		gc_ref.move((x_pos, y_pos))
 		gc_refs.append(gc_ref)
 
 	if label_prefix and gc_refs:
@@ -1103,6 +1104,14 @@ def _route_outputs_phase_mode(
 	# Sort top to bottom
 	output_ports.sort(key=lambda p: p.center[1], reverse=True)
 
+		# Ensure OUT1 (top) connects to OUT6 (bottom)
+	gc_refs_sorted = sorted(gc_output_refs, key=lambda r: r.center[1], reverse=True)
+	if len(gc_refs_sorted) >= 2:
+		# Swap to flip the routing (top goes down, bottom goes up)
+		connect_gc_top_bottom_drawn(circuit,
+							  list(reversed(gc_refs_sorted)),
+							  back_offset=-20
+)
 	# Default to first pair if not specified
 	if output_pairs is None:
 		output_pairs = [(0, 1)]
@@ -1313,7 +1322,7 @@ def add_mzi_calibration(
 		h3=h3,
 	)
 
-	# Connect combiner output to output port
+	# Connect combiner output to output GC port
 	combiner_out = combiner_ports.get("o1")
 	if combiner_out:
 		combiner_out_norm = _make_port_compatible(combiner_out, SIN_LAYER, target_width)
@@ -1336,6 +1345,7 @@ def generate_SC_circuit(
 	feature_mode: str = "power",
 	output_gc_dx: float = 0.0,
 	output_gc_dy: float = 0.0,
+	output_gc_align_mode: int | str = 4,
 	sc_align_gc_index: int | None = None,
 	phase_mmi_shift_x: float = 200.0,
 	phase_delta_L: float = 300.0,
@@ -1361,6 +1371,10 @@ def generate_SC_circuit(
 		num_inputs: Number of input channels.
 		num_outputs: Number of output channels.
 		gc_pitch: Grating coupler pitch (um).
+		output_gc_align_mode: Output GC alignment mode.
+			1: align output top GC with input top GC.
+			2: center output GC array on input GC array center.
+			4: center output GC array on star coupler output center.
 	
 	Returns:
 		Dict with 'component' and 'ref'.
@@ -1412,10 +1426,38 @@ def generate_SC_circuit(
 		star_bbox = sc_ports["ref"].dbbox()
 		max_x = star_bbox.right
 		star_outputs_center_y = (star_bbox.top + star_bbox.bottom) / 2.0
+
+	input_gc_centers_y = [ref.center[1] for ref in input_gc_refs]
+	input_gc_top_y = max(input_gc_centers_y) if input_gc_centers_y else 0.0
+	input_gc_center_y = (
+		(sum(input_gc_centers_y) / len(input_gc_centers_y)) if input_gc_centers_y else 0.0
+	)
+
+	align_mode = output_gc_align_mode
+	if isinstance(align_mode, str):
+		align_mode = align_mode.strip().lower()
+		align_mode = {
+			"top": 1,
+			"input_top": 1,
+			"match_input_top": 1,
+			"center_input": 2,
+			"input_center": 2,
+			"center_star": 4,
+			"star_center": 4,
+		}.get(align_mode, 4)
+
 	array_height = (output_gc_count - 1) * gc_pitch
+
+	if align_mode == 1:
+		output_top_y = input_gc_top_y
+	elif align_mode == 2:
+		output_top_y = input_gc_center_y + (array_height / 2.0)
+	else:
+		output_top_y = star_outputs_center_y + (array_height / 2.0)
+	
 	output_gc_pos = (
 		max_x + output_gc_dx,
-		star_outputs_center_y + (array_height / 2.0) + output_gc_dy,
+		output_top_y + output_gc_dy,
 	)
 	output_gc_refs = add_output_grating_coupler_array(
 		circuit,
@@ -1522,14 +1564,16 @@ def build_from_template(
 			num_outputs=8,
 			gc_pitch=127.0,
 			feature_mode="power",
-			output_gc_dx = -1180,
-			output_gc_dy= 500,
+			output_gc_align_mode=1,
+			output_gc_dx = 950,
+			output_gc_dy= 0,
 			sc_align_gc_index=3,  # Align star coupler center with IN4 (index 3)
 			expose_gc_ports={
 				"cal_in": ("input", 7),
-				"cal_out": ("output", 3),
+				"cal_out": ("output", 6),
 			},
 		)
+
 
 		# Add MZI calibration between IN7 and OUT7 of the first star coupler 
 		add_mzi_calibration(
@@ -1539,21 +1583,23 @@ def build_from_template(
 			short_length=300.0,
 			delta_L=300,
 			loop_side="north",
-			input_extension=200
+			input_extension=200,
+			# For output and output GC port check sc_power expose ports
 		)
 
 		SC_phase = generate_SC_circuit(
 			parent_cell=subdie_2,
-			origin=(210, 134),  # Absolute position within Sub_Die_2
+			origin=(210, 230),  # Absolute position within Sub_Die_2
 			num_inputs=7,
 			num_outputs=6,
 			gc_pitch=127.0,
 			feature_mode="phase",
-			output_gc_dx = -1180,
-			output_gc_dy= 390,
+			output_gc_align_mode=1,
+			output_gc_dx = 950,
+			output_gc_dy= 0,
 			phase_delta_L=300.0,
 			phase_output_pairs=[(0, 1), (2, 3)],  # Two MZI pairs: top two and center two
-			phase_gc_indices=[4, 3],
+			phase_gc_indices=[1, 2],
 		)
 		# Add another SC circuit instance at different position if needed
 
