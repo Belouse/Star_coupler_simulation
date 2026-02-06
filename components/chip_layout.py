@@ -80,7 +80,7 @@ def add_port_label(
 	text: str,
 	position: tuple[float, float],
 	size: float = 8.0,
-	layer: tuple[int, int] = ubcpdk.LAYER.TEXT,
+	layer: tuple[int, int] = (4, 0),
 ) -> None:
 	"""Add engraved text label on the chip."""
 	label = gf.components.text(text=text, size=size, layer=layer)
