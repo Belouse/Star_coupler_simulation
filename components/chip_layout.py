@@ -449,7 +449,7 @@ def connect_star_coupler_inputs_to_gcs(
 	gc_refs: list,
 	start_gc_index: int = 1,
 	bend_radius: float = 60.0,
-	s_bend_indices = {1, 2, 3}
+	s_bend_indices = None
 ) -> None:
 	"""Route star coupler input ports to the GC array starting at IN2.
 
@@ -542,7 +542,7 @@ def _route_outputs_power_mode(
 	circuit: gf.Component,
 	star_ref: gf.ComponentReference,
 	output_gc_refs: list,
-	s_bend_indices: set = {0, 1, 2, 3},
+	s_bend_indices: set = {None},
 ) -> None:
 	"""Route star coupler outputs directly to GC array (power mode)."""
 	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
@@ -1355,6 +1355,8 @@ def generate_SC_circuit(
 	phase_gc_indices: list[int] | None = None,
 	expose_gc_ports: dict[str, tuple[str, int]] | None = None,
 	gc_output_port_index_phase: int = 1,
+	s_bend_input_indices: dict[int, list[int]] | None ={},
+	s_bend_output_indices: dict[int, list[int]] | None ={}
 ) -> dict:
 	"""Generate complete Star Coupler circuit with all components.
 	
@@ -1414,6 +1416,7 @@ def generate_SC_circuit(
 		gc_refs=input_gc_refs,
 		start_gc_index=1,
 		bend_radius=50.0,
+		s_bend_indices=s_bend_input_indices,
 	)
 	
 	# 3. Add output grating couplers (returns instance refs)
@@ -1483,7 +1486,7 @@ def generate_SC_circuit(
 	# 4. Feature-specific output routing
 	mode = feature_mode.lower()
 	if mode == "power":
-		_route_outputs_power_mode(circuit, sc_ports["ref"], output_gc_refs)
+		_route_outputs_power_mode(circuit, sc_ports["ref"], output_gc_refs, s_bend_indices=s_bend_output_indices)
 	elif mode == "amplitude_same_lenght":
 		_route_outputs_amplitude_same_length_mode(circuit, sc_ports["ref"], output_gc_refs)
 	elif mode == "phase":
@@ -1563,7 +1566,7 @@ def build_from_template(
 			parent_cell=subdie_2,
 			origin=(210, 1150),  # Absolute position within Sub_Die_2
 			num_inputs=8,
-			num_outputs=8,
+			num_outputs=7,
 			gc_pitch=127.0,
 			feature_mode="power",
 			output_gc_align_mode=1,
@@ -1574,6 +1577,7 @@ def build_from_template(
 				"cal_in": ("input", 7),
 				"cal_out": ("output", 6),
 			},
+			s_bend_output_indices={2}
 		)
 
 
@@ -1591,19 +1595,40 @@ def build_from_template(
 
 		SC_phase = generate_SC_circuit(
 			parent_cell=subdie_2,
-			origin=(210, 230),  # Absolute position within Sub_Die_2
+			origin=(350, 330),  # Absolute position within Sub_Die_2
 			num_inputs=7,
 			num_outputs=6,
+			gc_pitch=127.0,
+			feature_mode="phase",
+			output_gc_align_mode=1,
+			output_gc_dx = 810,
+			output_gc_dy= 0,
+			phase_delta_L=300.0,
+			phase_output_pairs=[(0, 1), (2, 3)],  # Two MZI pairs: top two and center two
+			phase_gc_indices=[1, 2],
+		)
+		
+		SC_phase_2 = generate_SC_circuit(
+			parent_cell=subdie_2,
+			origin=(210, -380),  # Absolute position within Sub_Die_2
+			num_inputs=7,
+			num_outputs=7,
 			gc_pitch=127.0,
 			feature_mode="phase",
 			output_gc_align_mode=1,
 			output_gc_dx = 950,
 			output_gc_dy= 0,
 			phase_delta_L=300.0,
-			phase_output_pairs=[(0, 1), (2, 3)],  # Two MZI pairs: top two and center two
-			phase_gc_indices=[1, 2],
+			phase_output_pairs=[(1, 2)],  
+			phase_gc_indices=[1],
+			expose_gc_ports={
+				"cal_in": ("input_1", 3),
+				"cal_out": ("output_1", 4),
+				"cal_in": ("input_2", 5),
+				"cal_out": ("output_2", 6),
+			},
+
 		)
-		# Add another SC circuit instance at different position if needed
 
 
 	else:
