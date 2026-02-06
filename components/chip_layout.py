@@ -1337,6 +1337,102 @@ def add_mzi_calibration(
 		)
 
 
+def add_material_loss_calibration(
+	circuit: gf.Component,
+	input_gc_origin: tuple[float, float],
+	waveguide_length: float = 1000.0,
+	waveguide_width: float = 0.75,
+	waveguide_layer: tuple[int, int] = (4, 0),
+	bend_radius: float = 25.0,
+	gc_spacing: float = 127.0,
+	input_extension: float = 20.0,
+	output_extension: float = 20.0,
+) -> None:
+	"""Add a material loss calibration circuit: single input GC -> straight waveguide -> single output GC.
+	
+	This independent circuit is used to measure material loss in the waveguide.
+	
+	Args:
+		circuit: The circuit component to add to.
+		input_gc_origin: Position (x, y) of the input grating coupler.
+		waveguide_length: Length of the straight SiN waveguide (um).
+		waveguide_width: Width of the waveguide (um).
+		waveguide_layer: Layer tuple for the waveguide (default: SiN layer (4, 0)).
+		bend_radius: Bend radius for routing (um).
+		gc_spacing: Vertical spacing between input and output GCs (um).
+		input_extension: Extension length after input GC (um).
+		output_extension: Extension length before output GC (um).
+	"""
+	# Create cross-section for the waveguide
+	cs_wg = gf.cross_section.cross_section(
+		layer=waveguide_layer,
+		width=waveguide_width,
+		radius=bend_radius,
+	)
+	
+	# Add input grating coupler
+	gc_input = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
+	gc_in_ref = circuit << gc_input
+	gc_in_ref.move(input_gc_origin)
+	input_port = list(gc_in_ref.ports)[0]
+	
+	# Add label for input
+	add_port_label(
+		circuit,
+		text="CAL_IN",
+		position=(gc_in_ref.center[0] + 25.0, gc_in_ref.center[1] + 5.0),
+		size=8.0,
+	)
+	
+	# Normalize input port and add extension
+	in_port_base = _make_port_compatible(input_port, waveguide_layer, input_port.width)
+	in_port = normalize_port_width(circuit, in_port_base, waveguide_width, length=10.0)
+	if input_extension > 0:
+		in_port = extend_port(circuit, in_port, input_extension)
+	in_port_wg = _make_port_compatible(in_port, waveguide_layer, waveguide_width)
+	
+	# Add straight waveguide section
+	straight_wg = gf.components.straight(length=waveguide_length, cross_section=cs_wg)
+	wg_ref = circuit << straight_wg
+	wg_ref.connect("o1", in_port_wg)
+	out_port_wg = wg_ref.ports["o2"]
+	
+	# Add output extension
+	if output_extension > 0:
+		out_port_wg = extend_port(circuit, out_port_wg, output_extension)
+	
+	# Add output grating coupler positioned below the input GC
+	gc_output = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
+	gc_out_ref = circuit << gc_output
+	gc_out_ref.rotate(180)
+	# Position output GC at the end of the waveguide path, with vertical offset
+	gc_out_ref.move((out_port_wg.x, input_gc_origin[1] - gc_spacing))
+	output_port = list(gc_out_ref.ports)[0]
+	
+	# Add label for output
+	add_port_label(
+		circuit,
+		text="CAL_OUT",
+		position=(gc_out_ref.center[0] - 52.0, gc_out_ref.center[1] + 5.0),
+		size=8.0,
+	)
+	
+	# Normalize output port
+	out_port_base = _make_port_compatible(output_port, waveguide_layer, output_port.width)
+	out_port_norm = normalize_port_width(circuit, out_port_base, waveguide_width, length=10.0)
+	out_port_gc = _make_port_compatible(out_port_norm, waveguide_layer, waveguide_width)
+	
+	# Route from waveguide to output GC
+	gf.routing.route_single(
+		circuit,
+		out_port_wg,
+		out_port_gc,
+		cross_section=cs_wg,
+		radius=bend_radius,
+		auto_taper=False,
+	)
+
+
 def generate_SC_circuit(
 	parent_cell: gf.Component,
 	origin: tuple[float, float] = (0, 0),
@@ -1626,8 +1722,9 @@ def build_from_template(
 				"cal_in": ("input_2", 5),
 				"cal_out": ("output_2", 6),
 			},
-
 		)
+
+
 
 
 	else:
