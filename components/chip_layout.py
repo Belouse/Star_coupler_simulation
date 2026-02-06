@@ -543,7 +543,7 @@ def _route_outputs_power_mode(
 	star_ref: gf.ComponentReference,
 	output_gc_refs: list,
 	s_bend_indices: set = {None},
-	bundle_routing_gap: float = 50.0,
+	bundle_routing_gap: float = 150.0,
 ) -> None:
 	"""Route star coupler outputs directly to GC array (power mode)."""
 	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
@@ -1442,23 +1442,35 @@ def add_waveguide_loop_reference(
 	waveguide_layer: tuple[int, int] = (4, 0),
 	bend_radius: float = 25.0,
 	orientation: str = "west",
-	loop_height: float = 50.0,
 ) -> None:
-	"""Add a horizontal waveguide loop reference connecting two ports.
+	"""Add a horizontal U-shaped waveguide loop reference connecting two ports.
 	
 	This creates an independent circuit that loops between input_port and output_port
-	with a horizontal layout. The loop height and total length are configurable.
+	with a U-shape consisting of:
+	- First horizontal segment (calculated)
+	- First bend: 90° euler bend
+	- Vertical segment: |dy| between ports
+	- Second bend: 90° euler bend
+	- Second horizontal segment (calculated)
+	
+	The horizontal segments are calculated so that the total path length equals total_length:
+	  horizontal_segment = (total_length - vertical_distance - 2*bend_arc_length) / 2
+	
+	Example: If total_length=2000 μm, ports 127 μm apart, bend_radius=25 μm:
+	  - Bend arc length = π * 25 / 2 ≈ 39.27 μm each
+	  - Total bends = 2 * 39.27 ≈ 78.54 μm
+	  - Vertical = 127 μm
+	  - Each horizontal = (2000 - 127 - 78.54) / 2 ≈ 897.23 μm
 	
 	Args:
 		parent_cell: Parent component to add the loop to.
 		input_port: Starting port (e.g., input_1).
 		output_port: Ending port (e.g., output_1).
-		total_length: Total waveguide length of the loop (um).
+		total_length: Total waveguide path length including all segments and bends (um).
 		waveguide_width: Width of the SiN waveguide (um).
 		waveguide_layer: Layer tuple for the waveguide (default: SiN layer (4, 0)).
 		bend_radius: Bend radius for corners (um).
-		orientation: Loop direction "west", "east", "north", "south" (default: "west").
-		loop_height: Vertical height of the loop (um).
+		orientation: Loop direction "west" or "east" (default: "west").
 	"""
 	# Create cross-section for the waveguide
 	cs_loop = gf.cross_section.cross_section(
@@ -1480,145 +1492,91 @@ def add_waveguide_loop_reference(
 	out_port = normalize_port_width(loop_circuit, out_port_base, waveguide_width, length=10.0)
 	out_port_wg = _make_port_compatible(out_port, waveguide_layer, waveguide_width)
 	
-	# Calculate arc length for bends (90° bend = pi * r / 2)
+	# Calculate vertical distance and direction
+	dy = out_port_wg.center[1] - in_port_wg.center[1]
+	# Invert angle: if output is below (dy < 0), we want positive angle to go down
+	vertical_angle = -90 if dy > 0 else 90
+	
+	# Calculate arc length for 90° bends: arc = pi * r / 2
 	bend_arc_length = 3.14159 * bend_radius / 2
-	total_bend_length = 4 * bend_arc_length  # 4 bends (corners of rectangle)
+	total_bend_length = 2 * bend_arc_length  # Only 2 bends in U-shape
 	
-	# Calculate straight segments
-	available_length = total_length - total_bend_length
+	# Vertical segment: distance between ports minus the radius offset from bends
+	vertical_segment_length = abs(dy)
 	
-	# Determine loop direction and segments based on orientation
+	# Total horizontal length available after accounting for vertical and bends
+	# total_length = 2*horizontal + vertical + 2*bends
+	# horizontal_segment_length = (total_length - vertical - 2*bends) / 2
+	available_for_horizontal = total_length - vertical_segment_length - total_bend_length
+	horizontal_segment_length = available_for_horizontal / 2.0
+	horizontal_segment_length = max(0, horizontal_segment_length)
+	
 	if orientation.lower() == "west":
-		# Loop goes to the left
-		# Segment lengths
-		seg1_length = available_length * 0.3  # Initial horizontal to the left
-		seg3_length = available_length * 0.3  # Horizontal across top of loop
-		seg5_length = available_length * 0.4  # Return horizontal to the right
-		
+		# Loop goes to the left: horizontal_left - bend - vertical - bend - horizontal_right
 		current_port = in_port_wg
 		
 		# Segment 1: Horizontal to the left
-		if seg1_length > 0.1:
-			s1 = loop_circuit << gf.components.straight(length=seg1_length, cross_section=cs_loop)
+		if horizontal_segment_length > 0.1:
+			s1 = loop_circuit << gf.components.straight(length=horizontal_segment_length, cross_section=cs_loop)
 			s1.connect("o1", current_port)
 			current_port = s1.ports["o2"]
 		
-		# Bend 1: Up (90° bend)
-		b1 = loop_circuit << gf.components.bend_euler(angle=90, cross_section=cs_loop, radius=bend_radius)
+		# Bend 1: Turn vertical (up or down based on output port height)
+		b1 = loop_circuit << gf.components.bend_euler(angle=vertical_angle, cross_section=cs_loop, radius=bend_radius)
 		b1.connect("o1", current_port)
 		current_port = b1.ports["o2"]
 		
-		# Segment 2: Vertical loop height
-		if loop_height > 0.1:
-			s2 = loop_circuit << gf.components.straight(length=loop_height, cross_section=cs_loop)
+		# Segment 2: Vertical segment
+		if vertical_segment_length > 0.1:
+			s2 = loop_circuit << gf.components.straight(length=vertical_segment_length, cross_section=cs_loop)
 			s2.connect("o1", current_port)
 			current_port = s2.ports["o2"]
 		
-		# Bend 2: Right (90° bend)
-		b2 = loop_circuit << gf.components.bend_euler(angle=90, cross_section=cs_loop, radius=bend_radius)
+		# Bend 2: Turn back horizontal (to the right)
+		b2 = loop_circuit << gf.components.bend_euler(angle=vertical_angle, cross_section=cs_loop, radius=bend_radius)
 		b2.connect("o1", current_port)
 		current_port = b2.ports["o2"]
 		
-		# Segment 3: Horizontal across loop
-		if seg3_length > 0.1:
-			s3 = loop_circuit << gf.components.straight(length=seg3_length, cross_section=cs_loop)
+		# Segment 3: Horizontal to the right (back toward output)
+		if horizontal_segment_length > 0.1:
+			s3 = loop_circuit << gf.components.straight(length=horizontal_segment_length, cross_section=cs_loop)
 			s3.connect("o1", current_port)
 			current_port = s3.ports["o2"]
-		
-		# Bend 3: Down (-90° bend)
-		b3 = loop_circuit << gf.components.bend_euler(angle=-90, cross_section=cs_loop, radius=bend_radius)
-		b3.connect("o1", current_port)
-		current_port = b3.ports["o2"]
-		
-		# Segment 4: Vertical down
-		if loop_height > 0.1:
-			s4 = loop_circuit << gf.components.straight(length=loop_height, cross_section=cs_loop)
-			s4.connect("o1", current_port)
-			current_port = s4.ports["o2"]
-		
-		# Bend 4: Left (-90° bend)
-		b4 = loop_circuit << gf.components.bend_euler(angle=-90, cross_section=cs_loop, radius=bend_radius)
-		b4.connect("o1", current_port)
-		current_port = b4.ports["o2"]
-		
-		# Segment 5: Final horizontal to connect to output
-		dx_final = out_port_wg.center[0] - current_port.center[0]
-		if abs(dx_final) > 0.1:
-			s5 = loop_circuit << gf.components.straight(length=abs(dx_final), cross_section=cs_loop)
-			s5.connect("o1", current_port)
-			current_port = s5.ports["o2"]
 	
 	elif orientation.lower() == "east":
-		# Loop goes to the right (similar but mirrored)
-		seg1_length = available_length * 0.3
-		seg3_length = available_length * 0.3
-		seg5_length = available_length * 0.4
-		
+		# Loop goes to the right: horizontal_right - bend - vertical - bend - horizontal_left
 		current_port = in_port_wg
 		
 		# Segment 1: Horizontal to the right
-		if seg1_length > 0.1:
-			s1 = loop_circuit << gf.components.straight(length=seg1_length, cross_section=cs_loop)
+		if horizontal_segment_length > 0.1:
+			s1 = loop_circuit << gf.components.straight(length=horizontal_segment_length, cross_section=cs_loop)
 			s1.connect("o1", current_port)
 			current_port = s1.ports["o2"]
 		
-		# Bend 1: Up (90° bend)
-		b1 = loop_circuit << gf.components.bend_euler(angle=90, cross_section=cs_loop, radius=bend_radius)
+		# Bend 1: Turn vertical (up or down based on output port height)
+		b1 = loop_circuit << gf.components.bend_euler(angle=vertical_angle, cross_section=cs_loop, radius=bend_radius)
 		b1.connect("o1", current_port)
 		current_port = b1.ports["o2"]
 		
-		# Segment 2: Vertical loop height
-		if loop_height > 0.1:
-			s2 = loop_circuit << gf.components.straight(length=loop_height, cross_section=cs_loop)
+		# Segment 2: Vertical segment
+		if vertical_segment_length > 0.1:
+			s2 = loop_circuit << gf.components.straight(length=vertical_segment_length, cross_section=cs_loop)
 			s2.connect("o1", current_port)
 			current_port = s2.ports["o2"]
 		
-		# Bend 2: Left (-90° bend, pointing back toward input)
-		b2 = loop_circuit << gf.components.bend_euler(angle=-90, cross_section=cs_loop, radius=bend_radius)
+		# Bend 2: Turn back horizontal (to the left, using -vertical_angle for correct direction)
+		b2 = loop_circuit << gf.components.bend_euler(angle=-vertical_angle, cross_section=cs_loop, radius=bend_radius)
 		b2.connect("o1", current_port)
 		current_port = b2.ports["o2"]
 		
-		# Segment 3: Horizontal across loop (toward output)
-		if seg3_length > 0.1:
-			s3 = loop_circuit << gf.components.straight(length=seg3_length, cross_section=cs_loop)
+		# Segment 3: Horizontal to the left (back toward output)
+		if horizontal_segment_length > 0.1:
+			s3 = loop_circuit << gf.components.straight(length=horizontal_segment_length, cross_section=cs_loop)
 			s3.connect("o1", current_port)
 			current_port = s3.ports["o2"]
-		
-		# Bend 3: Down (90° bend)
-		b3 = loop_circuit << gf.components.bend_euler(angle=90, cross_section=cs_loop, radius=bend_radius)
-		b3.connect("o1", current_port)
-		current_port = b3.ports["o2"]
-		
-		# Segment 4: Vertical down
-		if loop_height > 0.1:
-			s4 = loop_circuit << gf.components.straight(length=loop_height, cross_section=cs_loop)
-			s4.connect("o1", current_port)
-			current_port = s4.ports["o2"]
-		
-		# Bend 4: Right (90° bend)
-		b4 = loop_circuit << gf.components.bend_euler(angle=-90, cross_section=cs_loop, radius=bend_radius)
-		b4.connect("o1", current_port)
-		current_port = b4.ports["o2"]
-		
-		# Segment 5: Final connection
-		dx_final = out_port_wg.center[0] - current_port.center[0]
-		if abs(dx_final) > 0.1:
-			s5 = loop_circuit << gf.components.straight(length=abs(dx_final), cross_section=cs_loop)
-			s5.connect("o1", current_port)
-			current_port = s5.ports["o2"]
 	
 	else:
 		raise ValueError(f"Orientation '{orientation}' not supported. Use 'west' or 'east'.")
-	
-	# Route from final current_port to output port
-	gf.routing.route_single(
-		loop_circuit,
-		current_port,
-		out_port_wg,
-		cross_section=cs_loop,
-		radius=bend_radius,
-		auto_taper=False,
-	)
 	
 	# Add the loop circuit to the parent cell
 	loop_ref = parent_cell << loop_circuit
@@ -1920,12 +1878,11 @@ def build_from_template(
 			parent_cell=subdie_2,
 			input_port=SC_phase_2["ref"].ports["input_1"],
 			output_port=SC_phase_2["ref"].ports["output_1"],
-			total_length=200.0,
+			total_length=400.0,
 			waveguide_width=0.75,
 			waveguide_layer=SIN_LAYER,
 			bend_radius=25.0,
 			orientation="west",
-			loop_height=0.0,
 		)
 
 
