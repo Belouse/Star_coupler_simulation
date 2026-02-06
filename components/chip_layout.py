@@ -449,6 +449,7 @@ def connect_star_coupler_inputs_to_gcs(
 	gc_refs: list,
 	start_gc_index: int = 1,
 	bend_radius: float = 60.0,
+	s_bend_indices = {1, 2, 3}
 ) -> None:
 	"""Route star coupler input ports to the GC array starting at IN2.
 
@@ -508,11 +509,11 @@ def connect_star_coupler_inputs_to_gcs(
 		gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
 		# Use S-bend for selected input ports (top-to-bottom indices)
-		sbend_indices = {1, 2, 3}
-		bundle_in = [p for i, p in enumerate(input_ports_norm) if i not in sbend_indices]
-		bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
-		sbend_in = [p for i, p in enumerate(input_ports_norm) if i in sbend_indices]
-		sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in sbend_indices]
+		
+		bundle_in = [p for i, p in enumerate(input_ports_norm) if i not in s_bend_indices]
+		bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in s_bend_indices]
+		sbend_in = [p for i, p in enumerate(input_ports_norm) if i in s_bend_indices]
+		sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in s_bend_indices]
 
 		# Push bends to the right by extending GC-side ports (bundle only)
 		bundle_gc = [extend_port(circuit, p, 150.0) for p in bundle_gc]
@@ -541,6 +542,7 @@ def _route_outputs_power_mode(
 	circuit: gf.Component,
 	star_ref: gf.ComponentReference,
 	output_gc_refs: list,
+	s_bend_indices: set = {0, 1, 2, 3},
 ) -> None:
 	"""Route star coupler outputs directly to GC array (power mode)."""
 	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
@@ -620,11 +622,11 @@ def _route_outputs_power_mode(
 	gc_ports_norm.sort(key=lambda p: p.center[1], reverse=True)
 
 	# Use S-bend for OUT3/OUT4 (indices 1 and 2 in top-to-bottom order)
-	sbend_indices = {1, 2}
-	bundle_out = [p for i, p in enumerate(output_ports_norm) if i not in sbend_indices]
-	bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in sbend_indices]
-	sbend_out = [p for i, p in enumerate(output_ports_norm) if i in sbend_indices]
-	sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in sbend_indices]
+	
+	bundle_out = [p for i, p in enumerate(output_ports_norm) if i not in s_bend_indices]
+	bundle_gc = [p for i, p in enumerate(gc_ports_norm) if i not in s_bend_indices]
+	sbend_out = [p for i, p in enumerate(output_ports_norm) if i in s_bend_indices]
+	sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in s_bend_indices]
 
 	# Push bundle bends away from GC ports (OUT2/OUT5)
 	bundle_gc = [extend_port(circuit, p, 200.0) for p in bundle_gc]
