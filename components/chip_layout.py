@@ -1501,12 +1501,14 @@ def add_waveguide_loop_reference(
 	bend_arc_length = 3.14159 * bend_radius / 2
 	total_bend_length = 2 * bend_arc_length  # Only 2 bends in U-shape
 	
-	# Vertical segment: distance between ports minus the radius offset from bends
-	vertical_segment_length = abs(dy)
+	# Vertical straight segment: total vertical distance minus space taken by bends
+	# Each 90° bend contributes bend_radius in the vertical direction
+	vertical_segment_length = abs(dy) - 2 * bend_radius
+	vertical_segment_length = max(0, vertical_segment_length)
 	
-	# Total horizontal length available after accounting for vertical and bends
-	# total_length = 2*horizontal + vertical + 2*bends
-	# horizontal_segment_length = (total_length - vertical - 2*bends) / 2
+	# Total horizontal length available after accounting for vertical segment and bend arcs
+	# total_length = 2*horizontal + vertical_straight + 2*bend_arcs
+	# horizontal_segment_length = (total_length - vertical_straight - 2*bend_arcs) / 2
 	available_for_horizontal = total_length - vertical_segment_length - total_bend_length
 	horizontal_segment_length = available_for_horizontal / 2.0
 	horizontal_segment_length = max(0, horizontal_segment_length)
@@ -1874,17 +1876,16 @@ def build_from_template(
 		)
 		
 		# Add waveguide loop reference connecting input_1 and output_1
-		add_waveguide_loop_reference(
+		c1 = add_waveguide_loop_reference(
 			parent_cell=subdie_2,
 			input_port=SC_phase_2["ref"].ports["input_1"],
 			output_port=SC_phase_2["ref"].ports["output_1"],
-			total_length=400.0,
+			total_length=500.0,
 			waveguide_width=0.75,
 			waveguide_layer=SIN_LAYER,
 			bend_radius=25.0,
 			orientation="west",
 		)
-
 
 
 
