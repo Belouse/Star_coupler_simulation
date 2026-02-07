@@ -753,7 +753,7 @@ def route_with_loop(
 	cross_section = None,
 	bend_radius: float = 25.0,
 	h1: float = 20.0,
-	h3: float = 50.0,
+	h3: float = 75.0,
 	max_iterations: int = 20,
 	tolerance: float = 0.1,
 ) -> gf.Port:
@@ -954,7 +954,7 @@ def route_arms_to_mmi(
 	cross_section=None,
 	bend_radius: float = 25.0,
 	h1: float = 20.0,
-	h3: float = 50.0,
+	h3: float = 75.0,
 ) -> dict:
 	"""Route short/long arms from start ports to MMI top/bottom ports."""
 	if cross_section is None:
@@ -1024,7 +1024,7 @@ def _route_single_phase_mzi(
 	loop_side: str = "north",
 	bend_radius: float = 25.0,
 	h1: float = 20.0,
-	h3: float = 50.0,
+	h3: float = 75.0,
 ) -> gf.Port | None:
 	"""Route a single MZI pair (long/short arms) and return MMI output port.
 	
@@ -1130,6 +1130,7 @@ def _route_outputs_phase_mode(
 	gc_output_refs: list | None = None,
 	gc_output_port_index_phase: int | None = None,
 	direct_sc_to_gc_routes: list[tuple[int, int]] | None = None,
+	h3: float = 75.0,
 ) -> None:
 	"""Interfere star coupler outputs pairwise (phase mode).
 
@@ -1209,7 +1210,7 @@ def _route_outputs_phase_mode(
 			loop_side=loop_side,
 			bend_radius=25.0,
 			h1=20.0,
-			h3=50.0,
+			h3=h3,
 		)
 		if mmi_out is not None:
 			mmi_out_ports.append(mmi_out)
@@ -1293,7 +1294,7 @@ def _route_outputs_phase_mode(
 				sc_out_norm,
 				gc_port_norm,
 				cross_section=cs_phase,
-				radius=50.0,
+				radius=25.0,
 				auto_taper=False,
 			)
 
@@ -1308,7 +1309,7 @@ def add_mzi_calibration(
 	loop_side: str = "north",
 	bend_radius: float = 25.0,
 	h1: float = 20.0,
-	h3: float = 50.0,
+	h3: float = 75.0,
 	input_extension: float = 20.0,
 	output_extension: float = 20.0,
 	input_mmi_shift_x: float = 0.0,
