@@ -752,8 +752,8 @@ def route_with_loop(
 	loop_side: str = "north",
 	cross_section = None,
 	bend_radius: float = 25.0,
-	h1: float = 40.0,
-	h3: float = 40.0,
+	h1: float = 20.0,
+	h3: float = 50.0,
 	max_iterations: int = 20,
 	tolerance: float = 0.1,
 ) -> gf.Port:
@@ -953,8 +953,8 @@ def route_arms_to_mmi(
 	loop_side: str = "north",
 	cross_section=None,
 	bend_radius: float = 25.0,
-	h1: float = 50.0,
-	h3: float = 20.0,
+	h1: float = 20.0,
+	h3: float = 50.0,
 ) -> dict:
 	"""Route short/long arms from start ports to MMI top/bottom ports."""
 	if cross_section is None:
@@ -1023,8 +1023,8 @@ def _route_single_phase_mzi(
 	delta_L: float = 175.0,
 	loop_side: str = "north",
 	bend_radius: float = 25.0,
-	h1: float = 50.0,
-	h3: float = 20.0,
+	h1: float = 20.0,
+	h3: float = 50.0,
 ) -> gf.Port | None:
 	"""Route a single MZI pair (long/short arms) and return MMI output port.
 	
@@ -1129,10 +1129,12 @@ def _route_outputs_phase_mode(
 	gc_output_indices: list[int] | None = None,
 	gc_output_refs: list | None = None,
 	gc_output_port_index_phase: int | None = None,
+	direct_sc_to_gc_routes: list[tuple[int, int]] | None = None,
 ) -> None:
 	"""Interfere star coupler outputs pairwise (phase mode).
 
-	Supports multiple MZI pairs with configurable loop direction.
+	Supports multiple MZI pairs with configurable loop direction, and direct
+	routing from star coupler outputs to GC outputs (bypassing MZI).
 	
 	Args:
 		output_pairs: List of (long_idx, short_idx) tuples for SC output pairs.
@@ -1140,6 +1142,9 @@ def _route_outputs_phase_mode(
 		gc_output_indices: List of GC output indices (one per pair).
 			If None, uses [gc_output_port_index_phase] for compatibility.
 		gc_output_refs: List of GC references to access output ports.
+		direct_sc_to_gc_routes: List of (sc_output_idx, gc_output_idx) tuples
+			for direct connections bypassing MZI. Example: [(0, 1), (3, 3)]
+			connects SC output 0 to GC output 1 (OUT2), and SC output 3 to GC output 3 (OUT4).
 	"""
 	# Get star coupler output ports
 	output_ports = [p for p in star_ref.ports if p.name.startswith("out")]
@@ -1203,8 +1208,8 @@ def _route_outputs_phase_mode(
 			delta_L=delta_L,
 			loop_side=loop_side,
 			bend_radius=25.0,
-			h1=50.0,
-			h3=20.0,
+			h1=20.0,
+			h3=50.0,
 		)
 		if mmi_out is not None:
 			mmi_out_ports.append(mmi_out)
@@ -1261,6 +1266,37 @@ def _route_outputs_phase_mode(
 		auto_taper=False,
 	)
 
+	# Route direct SC outputs to GC outputs (no MZI)
+	if direct_sc_to_gc_routes:
+		for sc_idx, gc_idx in direct_sc_to_gc_routes:
+			if sc_idx >= len(output_ports):
+				print(f"[WARN] SC output index {sc_idx} out of range")
+				continue
+			if gc_idx >= len(gc_output_refs):
+				print(f"[WARN] GC output index {gc_idx} out of range")
+				continue
+			
+			# Get SC output port and GC port
+			sc_out = output_ports[sc_idx]
+			gc_port = list(gc_output_refs[gc_idx].ports)[0]
+			
+			# Normalize widths
+			sc_out_norm = normalize_port_width(circuit, sc_out, 0.75, length=10.0)
+			gc_port_compatible = _make_port_compatible(gc_port, SIN_LAYER, 0.75)
+			gc_port_norm = normalize_port_width(circuit, gc_port_compatible, 0.75, length=10.0)
+			
+			print(f"[DEBUG] Direct route: SC output {sc_idx} → GC output {gc_idx}")
+			
+			# Route directly
+			gf.routing.route_single(
+				circuit,
+				sc_out_norm,
+				gc_port_norm,
+				cross_section=cs_phase,
+				radius=50.0,
+				auto_taper=False,
+			)
+
 
 
 def add_mzi_calibration(
@@ -1271,8 +1307,8 @@ def add_mzi_calibration(
 	delta_L: float = 175.0,
 	loop_side: str = "north",
 	bend_radius: float = 25.0,
-	h1: float = 50.0,
-	h3: float = 20.0,
+	h1: float = 20.0,
+	h3: float = 50.0,
 	input_extension: float = 20.0,
 	output_extension: float = 20.0,
 	input_mmi_shift_x: float = 0.0,
@@ -1690,7 +1726,10 @@ def generate_SC_circuit(
 	expose_gc_ports: dict[str, tuple[str, int]] | None = None,
 	gc_output_port_index_phase: int = 1,
 	s_bend_input_indices: dict[int, list[int]] | None ={},
-	s_bend_output_indices: dict[int, list[int]] | None ={}
+	s_bend_output_indices: dict[int, list[int]] | None ={},
+	direct_sc_to_gc_routes: list[tuple[int, int]] | None = None,
+	h1_MZI: float = 20.0,
+	h3_MZI: float = 50.0,
 ) -> dict:
 	"""Generate complete Star Coupler circuit with all components.
 	
@@ -1833,6 +1872,7 @@ def generate_SC_circuit(
 			gc_output_indices=phase_gc_indices,
 			gc_output_refs=output_gc_refs,
 			gc_output_port_index_phase=gc_output_port_index_phase,
+			direct_sc_to_gc_routes=direct_sc_to_gc_routes,
 		)
 	else:
 		raise ValueError(
@@ -1892,6 +1932,15 @@ def build_from_template(
 	chip = gf.Component("chip_layout")
 	ref = chip << template
 
+
+	#general parameters for SC circuit
+	h1_param = 20.0
+	h3_param = 50.0
+	short_length_param = 200.0
+	delta_L_param = 300.0
+
+
+
 	# Find Sub_Die_2 and add complete SC circuit
 	subdie_2 = find_subdie_cell(ref.cell, "Sub_Die_2")
 	if subdie_2:
@@ -1920,11 +1969,13 @@ def build_from_template(
 			parent_cell=subdie_2,
 			input_port=sc_power["ref"].ports["cal_in"],
 			output_port=sc_power["ref"].ports["cal_out"],
-			short_length=300.0,
-			delta_L=300,
 			loop_side="north",
 			input_extension=200,
 			# For output and output GC port check sc_power expose ports
+			h1=h1_param,
+			h3=h3_param,
+			short_length=short_length_param,
+			delta_L=delta_L_param,
 		)
 
 		SC_phase_1 = generate_SC_circuit(
@@ -1937,7 +1988,9 @@ def build_from_template(
 			output_gc_align_mode=1,
 			output_gc_dx = 810,
 			output_gc_dy= 0,
-			phase_delta_L=300.0,
+			phase_delta_L=delta_L_param,
+			h1_MZI=h1_param,
+			h3_MZI=h3_param,
 			phase_output_pairs=[(0, 1), (2, 3)],  # Two MZI pairs: top two and center two
 			phase_gc_indices=[1, 2],
 						expose_gc_ports={
@@ -1956,16 +2009,17 @@ def build_from_template(
 			output_gc_align_mode=1,
 			output_gc_dx = 950,
 			output_gc_dy= 0,
-			phase_delta_L=300.0,
+			phase_delta_L=delta_L_param,
 			phase_output_pairs=[(1, 2)],  
-			phase_gc_indices=[1],
+			phase_gc_indices=[2],
+			direct_sc_to_gc_routes=[(0, 1), (3, 3)],  # SC output 0 → OUT2, SC output 3 → OUT4
 			expose_gc_ports={
-				"input_2": ("output", 3),
-				"output_2": ("output", 4),
 				"input_3": ("output", 5),
 				"output_3": ("output", 6),
 			},
 		)
+
+		# Add waveguide loop reference 
 		calib_1 = add_waveguide_loop_reference(
 			parent_cell=subdie_2,
 			input_port=SC_phase_1["ref"].ports["input_1"],
@@ -1977,17 +2031,7 @@ def build_from_template(
 			orientation="west",
 		)
 		
-		# Add waveguide loop reference connecting input_1 and output_1
-		calib_2 = add_waveguide_loop_reference(
-			parent_cell=subdie_2,
-			input_port=SC_phase_2["ref"].ports["input_2"],
-			output_port=SC_phase_2["ref"].ports["output_2"],
-			total_length=500.0,
-			waveguide_width=0.75,
-			waveguide_layer=SIN_LAYER,
-			bend_radius=25.0,
-			orientation="west",
-		)
+		
 
 		calib_3 = add_waveguide_loop_reference(
 			parent_cell=subdie_2,
