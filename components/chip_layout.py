@@ -784,31 +784,41 @@ def route_with_loop(
 	
 	# Calculate bend arc length (90° bend = pi * r / 2)
 	bend_arc_length = 3.14159 * bend_radius / 2
-	total_bend_length = 3 * bend_arc_length  # 3 bends: up/down, right, down/up
-	
-	# Direct distance
-	dx_direct = port_end.center[0] - port_start.center[0]
-	dy_direct = port_end.center[1] - port_start.center[1]
+	total_bend_length = 4 * bend_arc_length  # 4 bends in the route
+
+	def _compute_lengths(loop_height_value: float) -> tuple[float, float, float, float]:
+		"""Return h2, h4, dy_return, total_length for a given loop height."""
+		h2_local = loop_height_value
+		current_x_after_loop = port_start.center[0] + h1 + h3 + 2 * bend_radius
+		h4_local = port_end.center[0] - current_x_after_loop
+
+		start_y = port_start.center[1]
+		if loop_side == "north":
+			current_y_after_b3 = start_y + h2_local + bend_radius
+			target_y_before_final_bend = port_end.center[1] + bend_radius
+		else:
+			current_y_after_b3 = start_y - h2_local - bend_radius
+			target_y_before_final_bend = port_end.center[1] - bend_radius
+		dy_return_local = abs(current_y_after_b3 - target_y_before_final_bend)
+
+		total_length = h1 + h2_local + h3 + h4_local + dy_return_local + total_bend_length
+		return h2_local, h4_local, dy_return_local, total_length
 	
 	# Binary search for optimal loop height
 	loop_height_min = 10.0
-	loop_height_max = 200.0
+	loop_height_max = 1500.0
 	loop_height = 100.0
 	
 	for iteration in range(max_iterations):
 		# Calculate path length with current loop height
-		h2 = loop_height
-		# h4 depends on how much X distance is consumed by h1, h3, and bends
-		current_x_after_loop = port_start.center[0] + h1 + h3 + 2 * bend_radius
-		h4 = port_end.center[0] - current_x_after_loop
-		
-		# Total length
-		total_length = h1 + h2 + h3 + h4 + total_bend_length
-		
+		h2, h4, dy_return, total_length = _compute_lengths(loop_height)
 		error = total_length - target_length
 		
 		if abs(error) < tolerance:
-			print(f"[DEBUG] route_with_loop converged: loop_height={loop_height:.2f} um, total={total_length:.2f} um (error={error:.3f} um)")
+			print(
+				f"[DEBUG] route_with_loop converged: loop_height={loop_height:.2f} um, "
+				f"total={total_length:.2f} um (error={error:.3f} um)"
+			)
 			break
 		
 		# Adjust loop height (binary search)
@@ -822,11 +832,12 @@ def route_with_loop(
 		print(f"[WARNING] route_with_loop did not converge after {max_iterations} iterations. Final error: {error:.3f} um")
 	
 	# Build the route with optimized loop height
-	h2 = loop_height
-	current_x_after_loop = port_start.center[0] + h1 + h3 + 2 * bend_radius
-	h4 = port_end.center[0] - current_x_after_loop
+	h2, h4, dy_return, total_length = _compute_lengths(loop_height)
 	
-	print(f"[DEBUG] route_with_loop: h1={h1}, h2={h2:.2f}, h3={h3}, h4={h4:.2f}, bends={total_bend_length:.2f}")
+	print(
+		f"[DEBUG] route_with_loop: h1={h1}, h2={h2:.2f}, h3={h3}, h4={h4:.2f}, "
+		f"dy_return={dy_return:.2f}, bends={total_bend_length:.2f}, total={total_length:.2f}"
+	)
 	
 	current_port = port_start
 	
@@ -867,10 +878,6 @@ def route_with_loop(
 	current_port = b3.ports["o2"]
 	
 	# Segment 7: Descend/ascend to destination Y (accounting for next bend offset)
-	current_y = current_port.center[1]
-	target_y_before_final_bend = port_end.center[1] + (bend_radius if loop_side == "north" else -bend_radius)
-	dy_return = abs(current_y - target_y_before_final_bend)
-	
 	if dy_return > 0.1:
 		s4 = circuit << gf.components.straight(length=dy_return, cross_section=cross_section)
 		s4.connect("o1", current_port)
@@ -1938,7 +1945,7 @@ def build_from_template(
 	h1_param = 20.0
 	h3_param = 50.0
 	short_length_param = 200.0
-	delta_L_param = 300.0
+	delta_L_param = 340.0
 
 
 
