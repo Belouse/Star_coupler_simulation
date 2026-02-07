@@ -82,11 +82,58 @@ def add_port_label(
 	position: tuple[float, float],
 	size: float = 8.0,
 	layer: tuple[int, int] = (4, 0),
+	orientation: str = "East",
 ) -> None:
-	"""Add engraved text label on the chip."""
+	"""Add engraved text label on the chip with automatic positioning.
+	
+	The label is automatically positioned and rotated based on GC orientation
+	and text length to avoid overlapping with the grating coupler.
+	
+	Args:
+		circuit: The circuit component.
+		text: Text to display.
+		position: Reference position (typically GC center + manual offset).
+		size: Text size (height in um).
+		layer: Layer for the text.
+		orientation: GC waveguide orientation ("North", "South", "East", "West").
+	"""
 	label = gf.components.text(text=text, size=size, layer=layer)
 	label_ref = circuit << label
-	label_ref.move(position)
+	
+	# Estimate text bounding box width
+	# Typical character width is ~60-70% of font size
+	char_width_factor = 0.85
+	text_width = len(text) * size * char_width_factor
+	
+	# Calculate additional shift based on text length and orientation
+	if orientation == "East":
+		# GC waveguide points right, text is horizontal
+		# Shift horizontally by half text width to center text at reference position
+		label_ref.rotate(0)
+		shift_x = 25 
+		shift_y = 5
+	elif orientation == "West":
+		# GC waveguide points left, text is horizontal
+		# Account for text extending to the left
+		label_ref.rotate(0)
+		shift_x = -text_width + size * 0.5 -30 # Adjust so text doesn't overlap GC
+		shift_y = 5
+	elif orientation == "North":
+		# GC waveguide points up, rotate text vertically
+		label_ref.rotate(90)
+		shift_x = 0
+		shift_y = 0
+	elif orientation == "South":
+		# GC waveguide points down, rotate text vertically
+		label_ref.rotate(90)
+		shift_x = 0
+		shift_y = -text_width + size * 0.5
+	else:
+		print("[WARNING] Unknown orientation for label: {}. No rotation or shift applied.".format(orientation))
+		shift_x = 0
+		shift_y = 0
+	
+	label_ref.move((position[0] + shift_x, position[1] + shift_y))
 
 
 def _add_grating_coupler_array(
@@ -96,7 +143,6 @@ def _add_grating_coupler_array(
 	pitch: float,
 	orientation: str,
 	label_prefix: str | None,
-	label_offset: tuple[float, float],
 	label_size: float,
 	label_order: str = "placement",
 ) -> list:
@@ -137,8 +183,9 @@ def _add_grating_coupler_array(
 			add_port_label(
 				circuit,
 				text=f"{label_prefix}{index}",
-				position=(gc_ref.center[0] + label_offset[0], gc_ref.center[1] + label_offset[1]),
+				position=(gc_ref.center[0], gc_ref.center[1]),
 				size=label_size,
+				orientation=orientation,
 			)
 
 	return gc_refs
@@ -150,7 +197,6 @@ def add_input_grating_coupler_array(
 	pitch: float = 127.0,
 	orientation: str = "East",
 	label_prefix: str | None = "IN",
-	label_offset: tuple[float, float] = (25.0, 5.0),
 	label_size: float = 8.0,
 ) -> list:
 	"""Add input grating coupler array to circuit.
@@ -172,7 +218,6 @@ def add_input_grating_coupler_array(
 		pitch=pitch,
 		orientation=orientation,
 		label_prefix=label_prefix,
-		label_offset=label_offset,
 		label_size=label_size,
 		label_order="placement",
 	)
@@ -273,7 +318,6 @@ def add_output_grating_coupler_array(
 	pitch: float = 127.0,
 	orientation: str = "West",
 	label_prefix: str | None = "OUT",
-	label_offset: tuple[float, float] = (-52.0, 5.0),
 	label_size: float = 8.0,
 	label_order: str = "top_to_bottom",
 ) -> list:
@@ -296,7 +340,6 @@ def add_output_grating_coupler_array(
 		pitch=pitch,
 		orientation=orientation,
 		label_prefix=label_prefix,
-		label_offset=label_offset,
 		label_size=label_size,
 		label_order=label_order,
 	)
@@ -1391,8 +1434,9 @@ def add_material_loss_calibration(
 	add_port_label(
 		circuit,
 		text=circuit_name + "_IN",
-		position=(gc_in_ref.center[0] + 25.0, gc_in_ref.center[1] + 5.0),
+		position=(gc_in_ref.center[0], gc_in_ref.center[1]),
 		size=8.0,
+		orientation = "East",
 	)
 	
 	# Normalize input port and add extension
@@ -1424,8 +1468,9 @@ def add_material_loss_calibration(
 	add_port_label(
 		circuit,
 		text=circuit_name + "_OUT",
-		position=(gc_out_ref.center[0] - 52.0, gc_out_ref.center[1] + 5.0),
+		position=(gc_out_ref.center[0], gc_out_ref.center[1]),
 		size=8.0,
+		orientation = "West",
 	)
 	
 	# Normalize output port
@@ -1956,13 +2001,13 @@ def build_from_template(
 		)
 
 		add_material_loss_calibration_array(
-			number_of_samples=8,
+			number_of_samples=7,
 			circuit=subdie_2,
-			input_gc_origin=(350, -875),
-			first_waveguide_length=100.0,
+			input_gc_origin=(350, -932),
+			first_waveguide_length=200.0,
 			waveguide_length_increment=100.0,
 			gc_spacing=35.0,
-			circuit_name="",
+			circuit_name=None,
 		)
 
 
