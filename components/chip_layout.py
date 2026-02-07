@@ -83,6 +83,7 @@ def add_port_label(
 	size: float = 8.0,
 	layer: tuple[int, int] = (4, 0),
 	orientation: str = "East",
+	rectangular: bool = False,
 ) -> None:
 	"""Add engraved text label on the chip with automatic positioning.
 	
@@ -97,12 +98,23 @@ def add_port_label(
 		layer: Layer for the text.
 		orientation: GC waveguide orientation ("North", "South", "East", "West").
 	"""
-	label = gf.components.text(text=text, size=size, layer=layer)
+
+	if rectangular:
+		pixel_size = size / 5.0
+    	# Ensure pixel size is not too small (must be > min feature size, e.g. 0.12um)
+		pixel_size = max(pixel_size, 0.15)	
+		label = gf.components.text_rectangular(
+		text=text, 
+		size=pixel_size, 
+		layer=layer
+		)	
+	else:
+		label = gf.components.text(text=text, size=size, layer=layer)
 	label_ref = circuit << label
 	
 	# Estimate text bounding box width
 	# Typical character width is ~60-70% of font size
-	char_width_factor = 0.85
+	char_width_factor = 1
 	text_width = len(text) * size * char_width_factor
 	
 	# Calculate additional shift based on text length and orientation
@@ -116,7 +128,7 @@ def add_port_label(
 		# GC waveguide points left, text is horizontal
 		# Account for text extending to the left
 		label_ref.rotate(0)
-		shift_x = -text_width + size * 0.5 -30 # Adjust so text doesn't overlap GC
+		shift_x = -text_width + size * 0.5 -40 # Adjust so text doesn't overlap GC
 		shift_y = 5
 	elif orientation == "North":
 		# GC waveguide points up, rotate text vertically
@@ -180,12 +192,13 @@ def _add_grating_coupler_array(
 				"label_order must be 'placement', 'top_to_bottom', or 'bottom_to_top'"
 			)
 		for index, gc_ref in enumerate(label_refs, start=1):
+
 			add_port_label(
 				circuit,
 				text=f"{label_prefix}{index}",
 				position=(gc_ref.center[0], gc_ref.center[1]),
 				size=label_size,
-				orientation=orientation,
+				orientation=orientation
 			)
 
 	return gc_refs
@@ -1543,7 +1556,7 @@ def add_material_loss_calibration(
 		text=circuit_name + "_IN",
 		position=(gc_in_ref.center[0], gc_in_ref.center[1]),
 		size=8.0,
-		orientation = "East",
+		orientation = "East"
 	)
 	
 	# Normalize input port and add extension
