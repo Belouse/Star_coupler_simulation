@@ -1295,15 +1295,78 @@ def _route_outputs_phase_mode(
 			
 			print(f"[DEBUG] Direct route: SC output {sc_idx} → GC output {gc_idx}")
 			
-			# Route directly
-			gf.routing.route_single(
-				circuit,
-				sc_out_norm,
-				gc_port_norm,
-				cross_section=cs_phase,
-				radius=25.0,
-				auto_taper=False,
-			)
+			# Check if this route might cross MZI regions (lower outputs)
+			# If sc_idx is in the lower half of outputs, add waypoints to avoid MZI
+			mid_output_idx = len(output_ports) // 2
+			if sc_idx >= mid_output_idx:
+				# Lower output - route below to avoid MZI
+				# Manually create path segments to avoid obstacles
+				current_port = sc_out_norm
+				
+				# Step 1: Go straight right a bit
+				dx1 = 0.0
+				s1 = circuit << gf.components.straight(length=dx1, cross_section=cs_phase)
+				s1.connect("o1", current_port)
+				current_port = s1.ports["o2"]
+				
+				# Step 2: Bend down
+				b1 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=50.0)
+				b1.connect("o1", current_port)
+				current_port = b1.ports["o2"]
+				
+				# Step 3: Go down to avoid MZI
+				dy_avoid = 0.0
+				s2 = circuit << gf.components.straight(length=dy_avoid, cross_section=cs_phase)
+				s2.connect("o1", current_port)
+				current_port = s2.ports["o2"]
+				
+				# Step 4: Bend right
+				b2 = circuit << gf.components.bend_euler(angle=90, cross_section=cs_phase, radius=50.0)
+				b2.connect("o1", current_port)
+				current_port = b2.ports["o2"]
+				
+				# Step 5: Go right towards GC
+				dx2 = gc_port_norm.center[0] - current_port.center[0] - 100.0 - 100.0
+				if dx2 > 1.0:
+					s3 = circuit << gf.components.straight(length=dx2, cross_section=cs_phase)
+					s3.connect("o1", current_port)
+					current_port = s3.ports["o2"]
+				
+				# Step 6: Bend up
+				b3 = circuit << gf.components.bend_euler(angle=90, cross_section=cs_phase, radius=50.0)
+				b3.connect("o1", current_port)
+				current_port = b3.ports["o2"]
+				
+				# Step 7: Go up to target Y level
+				dy_return = abs(gc_port_norm.center[1] - current_port.center[1]) - 50.0
+				if dy_return > 1.0:
+					s4 = circuit << gf.components.straight(length=dy_return, cross_section=cs_phase)
+					s4.connect("o1", current_port)
+					current_port = s4.ports["o2"]
+				
+				# Step 8: Bend right
+				b4 = circuit << gf.components.bend_euler(angle=-90, cross_section=cs_phase, radius=50.0)
+				b4.connect("o1", current_port)
+				current_port = b4.ports["o2"]
+				
+				# Step 9: Final straight to GC
+				dx_final = gc_port_norm.center[0] - current_port.center[0]
+				if dx_final > 1.0:
+					s5 = circuit << gf.components.straight(length=dx_final, cross_section=cs_phase)
+					s5.connect("o1", current_port)
+					current_port = s5.ports["o2"]
+				
+				print(f"[DEBUG] Used obstacle avoidance manual routing")
+			else:
+				# Upper output - direct route should be fine
+				gf.routing.route_single(
+					circuit,
+					sc_out_norm,
+					gc_port_norm,
+					cross_section=cs_phase,
+					radius=25.0,
+					auto_taper=False,
+				)
 
 
 
