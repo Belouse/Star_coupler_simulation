@@ -450,7 +450,8 @@ def connect_star_coupler_inputs_to_gcs(
 	gc_refs: list,
 	start_gc_index: int = 1,
 	bend_radius: float = 60.0,
-	s_bend_indices = None
+	s_bend_indices = None,
+	distance_GC_first_bend: float = 00.0
 ) -> None:
 	"""Route star coupler input ports to the GC array starting at IN2.
 
@@ -517,7 +518,7 @@ def connect_star_coupler_inputs_to_gcs(
 		sbend_gc = [p for i, p in enumerate(gc_ports_norm) if i in s_bend_indices]
 
 		# Push bends to the right by extending GC-side ports (bundle only)
-		bundle_gc = [extend_port(circuit, p, 150.0) for p in bundle_gc]
+		bundle_gc = [extend_port(circuit, p, distance_GC_first_bend) for p in bundle_gc]
 
 		if bundle_in and bundle_gc:
 			gf.routing.route_bundle(
@@ -1353,9 +1354,10 @@ def add_material_loss_calibration(
 	waveguide_width: float = 0.75,
 	waveguide_layer: tuple[int, int] = (4, 0),
 	bend_radius: float = 25.0,
-	gc_spacing: float = 127.0,
-	input_extension: float = 20.0,
-	output_extension: float = 20.0,
+	gc_in_out_dy: float = 0.0,
+	input_extension: float = 0.0,
+	output_extension: float = 0.0,
+	circuit_name: str = "calibration_material_loss",
 ) -> None:
 	"""Add a material loss calibration circuit: single input GC -> straight waveguide -> single output GC.
 	
@@ -1368,7 +1370,7 @@ def add_material_loss_calibration(
 		waveguide_width: Width of the waveguide (um).
 		waveguide_layer: Layer tuple for the waveguide (default: SiN layer (4, 0)).
 		bend_radius: Bend radius for routing (um).
-		gc_spacing: Vertical spacing between input and output GCs (um).
+		gc_in_out_dy: Vertical spacing between input and output GCs (um).
 		input_extension: Extension length after input GC (um).
 		output_extension: Extension length before output GC (um).
 	"""
@@ -1388,7 +1390,7 @@ def add_material_loss_calibration(
 	# Add label for input
 	add_port_label(
 		circuit,
-		text="CAL_IN",
+		text=circuit_name + "_IN",
 		position=(gc_in_ref.center[0] + 25.0, gc_in_ref.center[1] + 5.0),
 		size=8.0,
 	)
@@ -1415,13 +1417,13 @@ def add_material_loss_calibration(
 	gc_out_ref = circuit << gc_output
 	gc_out_ref.rotate(180)
 	# Position output GC at the end of the waveguide path, with vertical offset
-	gc_out_ref.move((out_port_wg.x, input_gc_origin[1] - gc_spacing))
+	gc_out_ref.move((out_port_wg.x, input_gc_origin[1] - gc_in_out_dy))
 	output_port = list(gc_out_ref.ports)[0]
 	
 	# Add label for output
 	add_port_label(
 		circuit,
-		text="CAL_OUT",
+		text=circuit_name + "_OUT",
 		position=(gc_out_ref.center[0] - 52.0, gc_out_ref.center[1] + 5.0),
 		size=8.0,
 	)
@@ -1440,6 +1442,37 @@ def add_material_loss_calibration(
 		radius=bend_radius,
 		auto_taper=False,
 	)
+
+def add_material_loss_calibration_array(
+	number_of_samples: int,
+	circuit: gf.Component,
+	input_gc_origin: tuple[float, float],
+	first_waveguide_length: float = 5000.0,
+	waveguide_length_increment: float = 100.0,
+	waveguide_width: float = 0.75,
+	waveguide_layer: tuple[int, int] = (4, 0),
+	bend_radius: float = 25.0,
+	gc_spacing: float = 0.0,
+	input_extension: float = 0.0,
+	output_extension: float = 0.0,
+	circuit_name: str = "material_loss",
+	) -> None:
+
+
+	for i in range(number_of_samples):
+		add_material_loss_calibration(
+			circuit=circuit,
+			waveguide_layer = waveguide_layer,
+			waveguide_width=waveguide_width,
+			bend_radius=bend_radius,
+			circuit_name = circuit_name+str(i),
+			input_gc_origin=(input_gc_origin[0], input_gc_origin[1] - i * gc_spacing),
+			waveguide_length=first_waveguide_length + i * waveguide_length_increment,
+		)
+
+
+
+	return None
 
 
 def add_waveguide_loop_reference(
@@ -1849,7 +1882,7 @@ def build_from_template(
 			# For output and output GC port check sc_power expose ports
 		)
 
-		SC_phase = generate_SC_circuit(
+		SC_phase_1 = generate_SC_circuit(
 			parent_cell=subdie_2,
 			origin=(350, 330),  # Absolute position within Sub_Die_2
 			num_inputs=7,
@@ -1862,6 +1895,10 @@ def build_from_template(
 			phase_delta_L=300.0,
 			phase_output_pairs=[(0, 1), (2, 3)],  # Two MZI pairs: top two and center two
 			phase_gc_indices=[1, 2],
+						expose_gc_ports={
+				"input_1": ("output", 4),
+				"output_1": ("output", 5),
+			}
 		)
 		
 		SC_phase_2 = generate_SC_circuit(
@@ -1878,18 +1915,28 @@ def build_from_template(
 			phase_output_pairs=[(1, 2)],  
 			phase_gc_indices=[1],
 			expose_gc_ports={
-				"input_1": ("output", 3),
-				"output_1": ("output", 4),
-				"input_2": ("output", 5),
-				"output_2": ("output", 6),
+				"input_2": ("output", 3),
+				"output_2": ("output", 4),
+				"input_3": ("output", 5),
+				"output_3": ("output", 6),
 			},
+		)
+		calib_1 = add_waveguide_loop_reference(
+			parent_cell=subdie_2,
+			input_port=SC_phase_1["ref"].ports["input_1"],
+			output_port=SC_phase_1["ref"].ports["output_1"],
+			total_length=300.0,
+			waveguide_width=0.75,
+			waveguide_layer=SIN_LAYER,
+			bend_radius=25.0,
+			orientation="west",
 		)
 		
 		# Add waveguide loop reference connecting input_1 and output_1
-		calib_1 = add_waveguide_loop_reference(
+		calib_2 = add_waveguide_loop_reference(
 			parent_cell=subdie_2,
-			input_port=SC_phase_2["ref"].ports["input_1"],
-			output_port=SC_phase_2["ref"].ports["output_1"],
+			input_port=SC_phase_2["ref"].ports["input_2"],
+			output_port=SC_phase_2["ref"].ports["output_2"],
 			total_length=500.0,
 			waveguide_width=0.75,
 			waveguide_layer=SIN_LAYER,
@@ -1897,10 +1944,10 @@ def build_from_template(
 			orientation="west",
 		)
 
-		calib_2 = add_waveguide_loop_reference(
+		calib_3 = add_waveguide_loop_reference(
 			parent_cell=subdie_2,
-			input_port=SC_phase_2["ref"].ports["input_2"],
-			output_port=SC_phase_2["ref"].ports["output_2"],
+			input_port=SC_phase_2["ref"].ports["input_3"],
+			output_port=SC_phase_2["ref"].ports["output_3"],
 			total_length=700.0,
 			waveguide_width=0.75,
 			waveguide_layer=SIN_LAYER,
@@ -1908,7 +1955,15 @@ def build_from_template(
 			orientation="west",
 		)
 
-
+		add_material_loss_calibration_array(
+			number_of_samples=5,
+			circuit=subdie_2,
+			input_gc_origin=(350, -1020),
+			first_waveguide_length=300.0,
+			waveguide_length_increment=100.0,
+			gc_spacing=35.0,
+			circuit_name="material_loss",
+		)
 
 
 	else:
