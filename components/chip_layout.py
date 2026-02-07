@@ -1455,7 +1455,7 @@ def add_material_loss_calibration_array(
 	gc_spacing: float = 0.0,
 	input_extension: float = 0.0,
 	output_extension: float = 0.0,
-	circuit_name: str = "material_loss",
+	circuit_name: str = "mat_loss",
 	) -> None:
 
 
@@ -1465,7 +1465,7 @@ def add_material_loss_calibration_array(
 			waveguide_layer = waveguide_layer,
 			waveguide_width=waveguide_width,
 			bend_radius=bend_radius,
-			circuit_name = circuit_name+str(i),
+			circuit_name = str(int(first_waveguide_length + i * waveguide_length_increment)) + "um",
 			input_gc_origin=(input_gc_origin[0], input_gc_origin[1] - i * gc_spacing),
 			waveguide_length=first_waveguide_length + i * waveguide_length_increment,
 		)
@@ -1956,13 +1956,13 @@ def build_from_template(
 		)
 
 		add_material_loss_calibration_array(
-			number_of_samples=5,
+			number_of_samples=8,
 			circuit=subdie_2,
-			input_gc_origin=(350, -1020),
-			first_waveguide_length=300.0,
+			input_gc_origin=(350, -875),
+			first_waveguide_length=100.0,
 			waveguide_length_increment=100.0,
 			gc_spacing=35.0,
-			circuit_name="material_loss",
+			circuit_name="",
 		)
 
 
