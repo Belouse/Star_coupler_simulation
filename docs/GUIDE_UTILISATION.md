@@ -15,7 +15,6 @@ Ce guide détaille l'utilisation du workflow de simulation varFDTD pour le star 
 ### Phase 1: Génération et configuration
 
 ```bash
-cd "c:\Users\Éloi Blouin\OneDrive - Université Laval\École\Ulaval zMaster\GEL-7070\Star_coupler_simulation"
 python scripts/Run_varFDTD.py
 ```
 
@@ -31,7 +30,7 @@ python scripts/Run_varFDTD.py
 ```
 [ÉTAPE 1] Génération du composant...
   ✓ GDS sauvegardé: star_coupler_for_mode.gds
-  ✓ 7 ports: ['e1', 'e2', 'e3', 'e4', 'o1', 'o2', 'o3']
+  ✓ 9 ports: ['i1', 'i2', 'i3', 'i4', 'i5', 'out1', 'out2', 'out3', 'out4']
 
 [ÉTAPE 2] Lancement de Lumerical MODE...
   ✓ Lumerical MODE lancé
@@ -50,8 +49,8 @@ python scripts/Run_varFDTD.py
 #### A. Ajouter les sources (ports d'entrée)
 
 1. Dans l'Object Tree, cliquez sur **Sources** → **Add** → **Mode Source**
-2. Configurez pour chaque port d'entrée (`o1`, `o2`, `o3`):
-   - **Name**: `source_o1`, `source_o2`, `source_o3`
+2. Configurez pour chaque port d'entrée (`i1`, `i2`, `i3`, `i4`, `i5`):
+   - **Name**: `source_i1`, `source_i2`, etc.
    - **X, Y**: Utiliser les coordonnées affichées par le script
    - **Y span**: 3x la largeur du guide (~1.5 µm)
    - **Injection axis**: X-axis
@@ -61,8 +60,8 @@ python scripts/Run_varFDTD.py
 #### B. Ajouter les moniteurs (ports de sortie)
 
 1. Dans l'Object Tree, cliquez sur **Monitors** → **Add** → **Frequency-domain field and power**
-2. Configurez pour chaque port de sortie (`e1`, `e2`, `e3`, `e4`):
-   - **Name**: `monitor_e1`, `monitor_e2`, etc.
+2. Configurez pour chaque port de sortie (`out1`, `out2`, `out3`, `out4`):
+   - **Name**: `monitor_out1`, `monitor_out2`, etc.
    - **Monitor type**: Linear X
    - **X, Y**: Utiliser les coordonnées affichées par le script
    - **Y span**: 3x la largeur du guide (~1.5 µm)
@@ -94,20 +93,20 @@ python scripts/extract_varFDTD_results.py
 **Sortie attendue:**
 ```
 [2] Extraction des données des moniteurs...
-  ✓ Moniteurs trouvés: ['monitor_e1', 'monitor_e2', 'monitor_e3', 'monitor_e4']
+  ✓ Moniteurs trouvés: ['monitor_out1', 'monitor_out2', 'monitor_out3', 'monitor_out4']
 
 [3] Récupération des données...
-  ✓ monitor_e1: 2.456e-13
-  ✓ monitor_e2: 2.458e-13
-  ✓ monitor_e3: 2.460e-13
-  ✓ monitor_e4: 2.462e-13
+  ✓ monitor_out1: 2.456e-13
+  ✓ monitor_out2: 2.458e-13
+  ✓ monitor_out3: 2.460e-13
+  ✓ monitor_out4: 2.462e-13
 
 [4] Calcul des transmissions...
 RÉSULTATS DE TRANSMISSION:
-  monitor_e1     : 2.456e-13 ( 24.98%)
-  monitor_e2     : 2.458e-13 ( 25.00%)
-  monitor_e3     : 2.460e-13 ( 25.01%)
-  monitor_e4     : 2.462e-13 ( 25.01%)
+  monitor_out1   : 2.456e-13 ( 24.98%)
+  monitor_out2   : 2.458e-13 ( 25.00%)
+  monitor_out3   : 2.460e-13 ( 25.01%)
+  monitor_out4   : 2.462e-13 ( 25.01%)
   Total          : 9.836e-13 (100.00%)
 ```
 
@@ -139,9 +138,8 @@ output/
     ├── star_coupler_varFDTD.lms      # Session Lumerical
     └── star_coupler_varFDTD_p0.log   # Log détaillé
 
-simulations/
-├── varFDTD_results.npz               # Données numpy complètes
-└── varFDTD_results.txt               # Résumé lisible
+output/simulations/
+├── star_coupler_S_matrix_V*.txt     # Résultats de simulation
 ```
 
 ## Astuces et conseils
@@ -162,11 +160,11 @@ simulations/
 - Pas besoin de réimporter le GDS
 
 ### Comparaison FDTD 3D
-Pour validation finale, utilisez:
+Pour validation finale, utilisez le script archivé:
 ```bash
-python scripts/Simulation_star_coupler.py
+python archived/Simulation_star_coupler.py
 ```
-(Plus long, mais plus précis)
+(Plus long, mais plus précis - nécessite adaptation)
 
 ## Dépannage
 

@@ -42,20 +42,24 @@ Fichier: `components/star_coupler.py`
 
 ```python
 star_coupler(
-    n_inputs=3,              # Nombre d'entrées [1-10]
+    n_inputs=5,              # Nombre d'entrées [1-10]
     n_outputs=4,             # Nombre de sorties [1-10]
-    pitch_inputs=10.0,       # Espacement entrées (µm) [5-20]
-    pitch_outputs=10.0,      # Espacement sorties (µm) [5-20]
+    input_angle=4.2,         # Angle entrées (degrés)
+    output_angle=1.5423,     # Angle sorties (degrés)
     angle_inputs=True,       # Tapers inclinés aux entrées
     angle_outputs=True,      # Tapers inclinés aux sorties
     taper_length=40.0,       # Longueur tapers (µm) [20-100]
     taper_wide=3.0,          # Largeur max tapers (µm) [1-5]
-    wg_width=0.5,           # Largeur guides (µm) [0.4-0.6]
-    radius=130.0,           # Rayon FPR (µm) [50-200]
-    width_rect=80.54,       # Largeur rectangle central (µm)
-    height_rect=152.824,    # Hauteur rectangle central (µm)
-    taper_overlap=0.1,      # Chevauchement tapers (µm)
-    clad_offset=3.0,        # Offset cladding (µm)
+    wg_width=0.75,           # Largeur guides (µm) [0.4-1.0]
+    input_radius=130.0,      # Rayon entrées FPR (µm) [50-200]
+    output_radius=120.0,     # Rayon sorties FPR (µm) [50-200]
+    width_rect=80.3,         # Largeur rectangle central (µm)
+    height_rect=152.824,     # Hauteur rectangle central (µm)
+    layer=(4, 0),            # Couche SiN
+    taper_overlap=0.2,       # Chevauchement tapers (µm)
+    clad_offset=3.0,         # Offset cladding (µm)
+    input_wg_length=10.0,    # Longueur guides entrée (µm)
+    output_wg_length=10.0,   # Longueur guides sortie (µm)
 )
 ```
 
@@ -64,14 +68,20 @@ star_coupler(
 ```
 Star_coupler_simulation/
 ├── components/          # Code des composants
+│   ├── star_coupler.py
+│   ├── chip_layout.py
+│   └── Version/
 ├── scripts/            # Scripts de simulation
+│   ├── Run_varFDTD.py
+│   ├── extract_varFDTD_results.py
+│   └── plot_result.py
 ├── output/             # Fichiers générés
 │   ├── gds/           # Fichiers GDS
-│   ├── fsp/           # Fichiers Lumerical
-│   └── logs/          # Logs de simulation
-├── simulations/        # Résultats numpy
+│   ├── lms/           # Fichiers Lumerical
+│   ├── fsp/
+│   └── simulations/   # Résultats S-matrix
 ├── archived/           # Anciens fichiers
-├── tests/             # Scripts de test
+├── build/              # Fichiers temporaires
 └── docs/              # Documentation
 ```
 
@@ -94,11 +104,11 @@ export LUMERICAL_VERSION="v252"
 Fichier: `requirements.txt`
 
 ```
-gdsfactory>=7.0.0
-ubcpdk
 numpy
-shapely
-klayout
+gdsfactory>=8.0.0
+gplugins>=2.0.0
+ubcpdk>=3.0.0
+matplotlib
 ```
 
 Installation:
@@ -135,8 +145,8 @@ sim_y_span = 250e-6
 ## Notes sur les versions
 
 ### gdsfactory
-- v7.x: Version actuelle, recommandée
-- v6.x: Compatible avec adaptations mineures
+- v8.x: Version actuelle, recommandée
+- v7.x: Compatible avec adaptations possibles
 
 ### Lumerical
 - MODE Solutions requis (pas FDTD seul)
