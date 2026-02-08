@@ -1,138 +1,129 @@
-# Star Coupler Simulation - GEL-7070
+# Star Coupler Simulation
 
-Projet de simulation d'un coupleur étoile (star coupler) utilisant gdsfactory et Lumerical MODE (varFDTD).
+Silicon photonics design and simulation tools for star coupler circuits using gdsfactory and Lumerical MODE. This project includes automated chip layout generation and varFDTD simulation workflows.
 
-## 📁 Structure du projet
+## Project Structure
 
 ```
 Star_coupler_simulation/
-├── components/           # Définitions des composants photoniques
-│   └── star_coupler.py  # Composant star coupler principal
+├── components/              # Photonic component definitions
+│   ├── star_coupler.py     # Star coupler component
+│   ├── chip_layout.py      # Full chip layout generator
+│   └── sharing_template_etch.gds
 │
-├── scripts/             # Scripts de simulation et d'analyse
-│   ├── Run_varFDTD.py              # Configuration automatique varFDTD
-│   ├── extract_varFDTD_results.py  # Extraction des résultats
-│   └── Simulation_star_coupler.py  # Simulation FDTD 3D complète
+├── scripts/                 # Simulation and analysis scripts
+│   ├── Run_varFDTD.py      # Automated varFDTD setup
+│   ├── extract_varFDTD_results.py
+│   └── plot_result.py
 │
-├── output/              # Fichiers générés par les simulations
-│   ├── gds/            # Fichiers GDS exportés
-│   ├── fsp/            # Fichiers de simulation Lumerical (.fsp)
-│   └── logs/           # Logs de simulation (.lms, .log)
+├── output/                  # Generated files
+│   ├── gds/                # GDS layout exports
+│   ├── lms/                # Lumerical simulation files
+│   └── fsp/
 │
-├── simulations/         # Résultats de simulation (npz, données)
+├── docs/                    # Documentation
+│   ├── GUIDE_UTILISATION.md
+│   ├── CONFIGURATION.md
+│   └── BUGFIXES.md
 │
-├── build/               # Fichiers de build temporaires
-│
-├── archived/            # Anciens fichiers et tests
-│
-├── tests/               # Scripts de test
-│
-├── requirements.txt     # Dépendances Python
-└── README.md           # Ce fichier
+└── archived/                # Legacy code and tests
 ```
 
-## 🚀 Workflow de simulation varFDTD
+## Installation
 
-### Prérequis
-- Python 3.8+
-- gdsfactory
-- ubcpdk
-- Lumerical MODE v252
+Requirements: Python 3.8+ and Lumerical MODE v252
 
-### Installation
 ```bash
 pip install -r requirements.txt
 ```
 
-### Étape 1: Configuration automatique
+## Quick Start
+
+### Generate Chip Layout
+
+Run the main chip layout generator to produce a complete GDS file:
+
+```bash
+python components/chip_layout.py
+```
+
+This generates a multi-circuit layout including:
+- Power mode star couplers with direct routing
+- Phase mode MZI characterization circuits
+- Material loss calibration structures
+- Waveguide loop references
+
+### Run varFDTD Simulation
+
+For individual component characterization:
+
 ```bash
 python scripts/Run_varFDTD.py
 ```
-Ce script:
-- Génère le composant star coupler avec gdsfactory
-- Exporte le fichier GDS
-- Lance Lumerical MODE
-- Configure automatiquement la structure (Si, SiO2)
-- Configure le solveur varFDTD
-- Affiche les positions des ports pour configuration manuelle
 
-### Étape 2: Configuration manuelle dans Lumerical
-Une fois le script terminé, dans Lumerical MODE:
-1. **Ajoutez des sources** aux ports d'entrée (o1, o2, o3)
-   - Type: Mode source
-   - Position: Utiliser les coordonnées affichées par le script
-   
-2. **Ajoutez des moniteurs Power** aux ports de sortie (e1, e2, e3, e4)
-   - Type: Frequency-domain field and power
-   - Position: Utiliser les coordonnées affichées par le script
+The script will:
+1. Generate the star coupler geometry
+2. Export GDS and launch Lumerical MODE
+3. Configure the simulation structure and solver
+4. Display port coordinates for manual setup
 
-3. **Lancez la simulation** (bouton Run)
+After the script completes, manually add sources and monitors in Lumerical MODE at the displayed coordinates, then run the simulation.
 
-### Étape 3: Extraction des résultats
+### Extract Results
+
 ```bash
 python scripts/extract_varFDTD_results.py
 ```
-Ce script:
-- Charge le fichier .fsp généré
-- Extrait les données des moniteurs
-- Calcule les transmissions
-- Sauvegarde les résultats dans `simulations/`
 
-## 📊 Résultats
+Results are saved to the output directory as NumPy arrays and text summaries.
 
-Les résultats sont sauvegardés dans le dossier `simulations/`:
-- `varFDTD_results.npz`: Données numpy complètes
-- `varFDTD_results.txt`: Résumé lisible des transmissions
+## Component Configuration
 
-## 🔧 Configuration du composant
-
-Le star coupler peut être configuré dans [components/star_coupler.py](components/star_coupler.py):
+The star coupler parameters can be adjusted in `components/star_coupler.py`:
 
 ```python
 star_coupler(
-    n_inputs=3,           # Nombre d'entrées
-    n_outputs=4,          # Nombre de sorties
-    pitch_inputs=10.0,    # Espacement des entrées (µm)
-    pitch_outputs=10.0,   # Espacement des sorties (µm)
-    taper_length=40.0,    # Longueur des tapers (µm)
-    taper_wide=3.0,       # Largeur max des tapers (µm)
-    wg_width=0.5,         # Largeur des guides d'onde (µm)
-    radius=130.0,         # Rayon de la FPR (µm)
+    n_inputs=5,
+    n_outputs=4,
+    pitch_inputs=10.0,
+    pitch_outputs=10.0,
+    taper_length=40.0,
+    wg_width=0.75,
+    radius=130.0,
+    layer=(4, 0)  # SiN layer
 )
 ```
 
-## 📝 Notes importantes
+The chip layout circuits support phase measurement with configurable MZI parameters:
+- `delta_L`: Path length difference for phase delay
+- `h1_MZI`, `h3_MZI`: MZI arm routing parameters
+- Direct SC-to-GC routing with obstacle avoidance
 
-### varFDTD vs FDTD 3D
-- **varFDTD**: Simulation 2D rapide (minutes), utilise un indice effectif
-- **FDTD 3D**: Simulation 3D complète (heures), plus précise mais gourmande en ressources
+## Simulation Notes
 
-### Fichiers générés
-- `.gds`: Géométrie du composant
-- `.fsp`: Fichier de simulation Lumerical
-- `.lms`: Session Lumerical
-- `.log`: Logs de simulation
+**varFDTD**: Fast 2D effective index simulation (minutes). Best for initial design iterations.
 
-## 🐛 Dépannage
+**FDTD 3D**: Full 3D simulation (hours). Use for final validation after varFDTD optimization.
 
-### Erreur "Failed to evaluate code" dans Lumerical
-- Les commandes d'API Python pour varFDTD sont limitées
-- Configuration manuelle des ports requise
-- Solution: Utilisez le workflow en 3 étapes décrit ci-dessus
+Due to Lumerical API limitations, varFDTD port configuration requires manual setup through the GUI. The automation scripts handle geometry and solver setup only.
 
-### Ports mal alignés
-- Vérifiez les coordonnées affichées par `Run_varFDTD.py`
-- Assurez-vous que le span des sources/moniteurs couvre la largeur du guide
+## Troubleshooting
 
-## 📚 Références
+**Port alignment issues**: Check coordinates printed by `Run_varFDTD.py`. Ensure source/monitor spans cover the waveguide width.
 
-- [gdsfactory Documentation](https://gdsfactory.github.io/gdsfactory/)
-- [ubcpdk Documentation](https://gdsfactory.github.io/ubc/)
-- [Lumerical MODE Documentation](https://optics.ansys.com/hc/en-us/articles/360034914793)
+**Routing conflicts**: The direct routing feature automatically detects and routes around MZI structures for lower star coupler outputs.
 
-## 👤 Auteur
+**Path length errors**: The `route_with_loop` function now includes vertical return segments in length calculations. Adjust `loop_height_max` if targeting long delays.
 
-Projet réalisé dans le cadre du cours GEL-7070 à l'Université Laval.
+## Documentation
 
----
-*Dernière mise à jour: 17 janvier 2026*
+See the `docs/` folder for detailed guides:
+- `GUIDE_UTILISATION.md`: Complete user guide
+- `CONFIGURATION.md`: Configuration reference
+- `RUN_VARFDTD_IMPROVEMENTS.md`: varFDTD workflow details
+
+## References
+
+- gdsfactory: https://gdsfactory.github.io/gdsfactory/
+- ubcpdk: https://gdsfactory.github.io/ubc/
+- Lumerical MODE: https://optics.ansys.com/hc/en-us/

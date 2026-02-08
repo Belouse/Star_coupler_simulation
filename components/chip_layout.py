@@ -274,55 +274,6 @@ def add_star_coupler(
 	return {"ref": star_ref, "input_ports": input_ports, "output_ports": output_ports}
 
 
-def add_power_splitter(
-	circuit: gf.Component,
-	origin: tuple[float, float] = (0, 0),
-	split_ratio: float = 0.5,
-) -> dict:
-	"""Add 1x2 power splitter (3dB, 50/50).
-	
-	Args:
-		circuit: The circuit component.
-		origin: Relative origin position (x, y).
-		split_ratio: Power split ratio (default 0.5 for 50/50).
-	
-	Returns:
-		Dict with 'input_port' and 'output_ports' positions.
-	"""
-	# TODO: Implement actual 2x1 MMI or Y-branch
-	
-	return {
-		"input_port": (origin[0], origin[1]),
-		"output_ports": [
-			(origin[0] + 50, origin[1] + 5),
-			(origin[0] + 50, origin[1] - 5),
-		]
-	}
-
-
-def add_interferometer_merger(
-	circuit: gf.Component,
-	origin: tuple[float, float] = (0, 0),
-) -> dict:
-	"""Add 2x1 interferometer merger (merge two waveguides).
-	
-	Args:
-		circuit: The circuit component.
-		origin: Relative origin position (x, y).
-	
-	Returns:
-		Dict with 'input_ports' and 'output_port' positions.
-	"""
-	# TODO: Implement actual 2x1 combiner/interferometer
-	
-	return {
-		"input_ports": [
-			(origin[0], origin[1] + 5),
-			(origin[0], origin[1] - 5),
-		],
-		"output_port": (origin[0] + 50, origin[1])
-	}
-
 
 def add_output_grating_coupler_array(
 	circuit: gf.Component,
@@ -719,7 +670,7 @@ def _route_outputs_amplitude_same_length_mode(
 
 	TODO: Implement equal-length routing from star outputs to GC ports.
 	"""
-	# TODO: Add length-matching serpentine or path-equalization routing
+
 	_ = (circuit, star_ref, output_gc_refs)
 
 
