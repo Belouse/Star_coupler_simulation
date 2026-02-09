@@ -122,7 +122,7 @@ def add_port_label(
 		# GC waveguide points right, text is horizontal
 		# Shift horizontally by half text width to center text at reference position
 		label_ref.rotate(0)
-		shift_x = 25 
+		shift_x = 10 
 		shift_y = 5
 	elif orientation == "West":
 		# GC waveguide points left, text is horizontal
@@ -148,6 +148,16 @@ def add_port_label(
 	label_ref.move((position[0] + shift_x, position[1] + shift_y))
 
 
+def _get_sin_grating_coupler() -> gf.Component:
+	"""Return a non-black-box SiN grating coupler for 1.55 um."""
+	cs_sin = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
+	return gf.components.grating_coupler_elliptical(
+		wavelength=1.55,
+		layer_slab=None,
+		cross_section=cs_sin,
+	)
+
+
 def _add_grating_coupler_array(
 	circuit: gf.Component,
 	origin: tuple[float, float],
@@ -159,7 +169,7 @@ def _add_grating_coupler_array(
 	label_order: str = "placement",
 ) -> list:
 	"""Add a grating coupler array to circuit."""
-	gc = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
+	gc = _get_sin_grating_coupler()
 	orientation_map = {
 		"East": {"angle": 0, "dx": 0, "dy": -pitch},
 		"West": {"angle": 180, "dx": 0, "dy": -pitch},
@@ -174,7 +184,7 @@ def _add_grating_coupler_array(
 		x_pos = origin[0] + i * config["dx"]
 		y_pos = origin[1] + i * config["dy"]
 		# Rotate first so the placement order stays consistent for all orientations
-		gc_ref.rotate(config["angle"])
+		gc_ref.rotate(config["angle"] -180)  
 		gc_ref.move((x_pos, y_pos))
 		gc_refs.append(gc_ref)
 
@@ -1496,7 +1506,7 @@ def add_material_loss_calibration(
 	)
 	
 	# Add input grating coupler
-	gc_input = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
+	gc_input = _get_sin_grating_coupler()
 	gc_in_ref = circuit << gc_input
 	gc_in_ref.move(input_gc_origin)
 	input_port = list(gc_in_ref.ports)[0]
@@ -1528,9 +1538,9 @@ def add_material_loss_calibration(
 		out_port_wg = extend_port(circuit, out_port_wg, output_extension)
 	
 	# Add output grating coupler positioned below the input GC
-	gc_output = ubcpdk.cells.GC_SiN_TE_1550_8degOxide_BB()
+	gc_output = _get_sin_grating_coupler()
 	gc_out_ref = circuit << gc_output
-	gc_out_ref.rotate(180)
+	gc_out_ref.rotate(0)
 	# Position output GC at the end of the waveguide path, with vertical offset
 	gc_out_ref.move((out_port_wg.x, input_gc_origin[1] - gc_in_out_dy))
 	output_port = list(gc_out_ref.ports)[0]
