@@ -1508,6 +1508,7 @@ def add_material_loss_calibration(
 	# Add input grating coupler
 	gc_input = _get_sin_grating_coupler()
 	gc_in_ref = circuit << gc_input
+	gc_in_ref.rotate(180)
 	gc_in_ref.move(input_gc_origin)
 	input_port = list(gc_in_ref.ports)[0]
 	
@@ -1540,7 +1541,7 @@ def add_material_loss_calibration(
 	# Add output grating coupler positioned below the input GC
 	gc_output = _get_sin_grating_coupler()
 	gc_out_ref = circuit << gc_output
-	gc_out_ref.rotate(0)
+
 	# Position output GC at the end of the waveguide path, with vertical offset
 	gc_out_ref.move((out_port_wg.x, input_gc_origin[1] - gc_in_out_dy))
 	output_port = list(gc_out_ref.ports)[0]
