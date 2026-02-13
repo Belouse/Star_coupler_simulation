@@ -124,13 +124,13 @@ def add_port_label(
 		# GC waveguide points right, text is horizontal
 		# Shift horizontally by half text width to center text at reference position
 		label_ref.rotate(0)
-		shift_x = 10 
+		shift_x = 25 
 		shift_y = 5
 	elif orientation == "West":
 		# GC waveguide points left, text is horizontal
 		# Account for text extending to the left
 		label_ref.rotate(0)
-		shift_x = -text_width + size * 0.5 -40 # Adjust so text doesn't overlap GC
+		shift_x = -text_width + size * 0.5 -25 # Adjust so text doesn't overlap GC
 		shift_y = 5
 	elif orientation == "North":
 		# GC waveguide points up, rotate text vertically
@@ -2104,10 +2104,10 @@ def build_from_template(
 		add_material_loss_calibration_array(
 			number_of_samples=7,
 			circuit=subdie_2,
-			input_gc_origin=(350, -932),
+			input_gc_origin=(350, -888),
 			first_waveguide_length=200.0,
 			waveguide_length_increment=100.0,
-			gc_spacing=35.0,
+			gc_spacing=127/3,
 			circuit_name=None,
 		)
 
