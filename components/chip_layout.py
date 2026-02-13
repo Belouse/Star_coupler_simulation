@@ -152,12 +152,20 @@ def add_port_label(
 
 def _get_sin_grating_coupler() -> gf.Component:
 	"""Return a non-black-box SiN grating coupler for 1.55 um."""
-	cs_sin = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
-	return gf.components.grating_coupler_elliptical(
-		wavelength=1.55,
-		layer_slab=None,
-		cross_section=cs_sin,
-	)
+
+	# ANT GC included in PDK
+	try:
+		GC = ANT_GC()
+
+	except:
+	# GDS factory included Grating Coupler:
+		cs_sin = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75)
+		GC = gf.components.grating_coupler_elliptical(
+			wavelength=1.55,
+			layer_slab=None,
+			cross_section=cs_sin,
+		)
+	return GC
 
 
 def _add_grating_coupler_array(

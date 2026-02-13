@@ -64,10 +64,9 @@ def ANT_GC(
     try:
         # 1. Attempt to import GDS
         c = gf.import_gds(gds_path, cellname=cell_name)
+        c.rotate(-90)  # Rotate to face left (West)
 
         # 2. Add Port o1
-        # IMPORTANT: Verify X,Y center in KLayout. 
-        # Assuming (0,0) for the taper tip.
         c.add_port(
             name="o1",
             center=(0, 0), 
