@@ -11,7 +11,9 @@ output/fsp
 build/oas/
 build/mask/
 
-ANT_MMI_TE_3dB.gds
+ANT_PDK.gds
 output/gds/SC_circuit_layout.gds
 components/__pycache__/MMI_ANT_TE_3dB.cpython-311.pyc
 output
+output/gds/SC_circuit_layout.gds
+components/__pycache__/ANT_PDK_component.cpython-311.pyc

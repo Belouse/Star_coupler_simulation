@@ -13,7 +13,8 @@ import ubcpdk
 import os
 
 from star_coupler import star_coupler
-from MMI_ANT_TE_3dB import my_mmi_3db
+from ANT_PDK_component import my_mmi_3db
+from ANT_PDK_component import ANT_GC
 
 # Suppress gdsfactory warnings about width being ignored when a cross_section is provided
 warnings.filterwarnings("ignore", message=".*ignored for cross_section.*")
