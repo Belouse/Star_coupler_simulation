@@ -2071,7 +2071,8 @@ def generate_SC_circuit(
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TEMPLATE_GDS = ROOT_DIR / "components" / "sharing_template_etch.gds"
+TEMPLATE_GDS = ROOT_DIR / "components" / "Yulong_Yang_v1.gds"
+TEMPLATE_TOP_CELL = "Top_CustomTemplate"
 OUTPUT_DIR = ROOT_DIR / "output" / "gds"
 
 # Target lower-left origin for the chip (in um)
@@ -2098,6 +2099,7 @@ def find_subdie_cell(cell: gf.Component, target_name: str) -> gf.Component | Non
 
 def build_from_template(
 	template_path: Path = TEMPLATE_GDS,
+	template_cellname: str | None = TEMPLATE_TOP_CELL,
 	chip_origin: tuple[float, float] = CHIP_ORIGIN,
 ) -> gf.Component:
 	"""Load the template GDS and add components.
@@ -2109,7 +2111,7 @@ def build_from_template(
 	if not template_path.exists():
 		raise FileNotFoundError(f"Template GDS not found: {template_path}")
 
-	template = gf.import_gds(template_path)
+	template = gf.import_gds(template_path, cellname=template_cellname)
 	chip = gf.Component("chip_layout")
 	ref = chip << template
 
