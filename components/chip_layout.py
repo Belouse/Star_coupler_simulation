@@ -78,6 +78,28 @@ def extend_port(
 # Component Generation Functions (Relative positioning within circuit)
 # ============================================================================
 
+
+def add_sem_rectangle(
+	circuit: gf.Component,
+	position: tuple[float, float],
+	width: float = 40.0,
+	height: float = 30.0,
+	layer: tuple[int, int] = (200, 0),
+) -> None:
+	"""Add a SEM rectangle marker on the specified layer.
+
+	Args:
+		circuit: Component where the rectangle is added.
+		position: Rectangle lower-left corner (x, y) in um.
+		width: Rectangle width in um (default 40 um).
+		height: Rectangle height in um (default 30 um).
+		layer: GDS layer tuple (default (200, 0)).
+	"""
+	rect = gf.components.rectangle(size=(width, height), layer=layer)
+	ref = circuit << rect
+	ref.move(position)
+
+
 def add_port_label(
 	circuit: gf.Component,
 	text: str,
@@ -85,7 +107,7 @@ def add_port_label(
 	size: float = 8.0,
 	layer: tuple[int, int] = (4, 0),
 	orientation: str = "East",
-	rectangular: bool = False,
+	rectangular: bool = True,
 ) -> None:
 	"""Add engraved text label on the chip with automatic positioning.
 	
@@ -124,13 +146,13 @@ def add_port_label(
 		# GC waveguide points right, text is horizontal
 		# Shift horizontally by half text width to center text at reference position
 		label_ref.rotate(0)
-		shift_x = 25 
+		shift_x = 25
 		shift_y = 5
 	elif orientation == "West":
 		# GC waveguide points left, text is horizontal
 		# Account for text extending to the left
 		label_ref.rotate(0)
-		shift_x = -text_width + size * 0.5 -25 # Adjust so text doesn't overlap GC
+		shift_x = -text_width + size * 0.5 -35 # Adjust so text doesn't overlap GC
 		shift_y = 5
 	elif orientation == "North":
 		# GC waveguide points up, rotate text vertically
@@ -2058,6 +2080,10 @@ CHIP_ORIGIN = (3143.33023, 6156.66426)
 # SiN waveguide layer (SiePIC 4/0)
 SIN_LAYER = (4, 0)
 
+# SEM marker layer
+SEM_LAYER = (200, 0)
+
+
 
 def find_subdie_cell(cell: gf.Component, target_name: str) -> gf.Component | None:
 	"""Recursively search for a Sub_Die cell by name."""
@@ -2219,6 +2245,13 @@ def build_from_template(
 			label_prefix="SPL",
 		)
 
+		add_sem_rectangle(
+			circuit=subdie_2,
+			position = (835, -66),
+			width = 40.0,
+			height = 30.0,
+			layer = SEM_LAYER,
+		)
 
 	else:
 		print("[WARNING] Sub_Die_2 not found")
