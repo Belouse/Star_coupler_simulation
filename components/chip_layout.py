@@ -1482,6 +1482,104 @@ def add_mzi_calibration(
 	return mzi_ref
 
 
+def add_mmi_splitter_calibration(
+	parent_cell: gf.Component,
+	origin: tuple[float, float] = (0.0, 0.0),
+	gc_pitch: float = 127.0,
+	mmi_shift_x: float = 250.0,
+	mmi_shift_y: float = 0.0,
+	bend_radius: float = 25.0,
+	label_prefix: str | None = "SPL",
+) -> gf.ComponentReference:
+	"""Add a splitter calibration subcircuit with 5 GC ports.
+
+	Circuit topology:
+	- 5-port GC array (East orientation)
+	- top GC and bottom GC connected together (reference path)
+	- 2nd GC -> MMI input (o1)
+	- MMI outputs (o2, o3) -> 3rd and 4th GCs
+
+	All coordinates are relative inside the subcircuit, then the subcircuit is
+	placed in ``parent_cell`` at ``origin``.
+	"""
+	cal_name = f"mmi_splitter_calibration_{str(uuid.uuid4())[:8]}"
+	cal_circuit = gf.Component(cal_name)
+
+	# 1) Five GC array, relative to subcircuit origin
+	gc_refs = add_input_grating_coupler_array(
+		circuit=cal_circuit,
+		origin=(0.0, 0.0),
+		num_couplers=5,
+		pitch=gc_pitch,
+		orientation="East",
+		label_prefix=label_prefix,
+		label_size=8.0,
+	)
+
+	if len(gc_refs) < 5:
+		raise ValueError("Splitter calibration requires 5 grating couplers")
+
+	# 2) Connect top and bottom GC like other arrays
+	connect_gc_top_bottom_drawn(cal_circuit, gc_refs)
+
+	# 3) Place MMI relative to GC2 input port and route ports
+	target_gc2 = list(gc_refs[1].ports)[0]
+	mmi_ref, mmi_ports = place_mmi_aligned_to_port(
+		circuit=cal_circuit,
+		target_port=target_gc2,
+		align_port_name="o1",
+		shift_x=mmi_shift_x,
+		shift_y=mmi_shift_y,
+		rotation=0.0,
+	)
+
+	cs_sin = gf.cross_section.cross_section(layer=SIN_LAYER, width=0.75, radius=bend_radius)
+
+	# GC2 -> MMI input o1
+	gc2_port = _make_port_compatible(list(gc_refs[1].ports)[0], SIN_LAYER, 0.75)
+	mmi_in = mmi_ports.get("o1")
+	if not mmi_in:
+		raise ValueError("MMI input port o1 not found")
+	mmi_in_port = _make_port_compatible(mmi_in, SIN_LAYER, 0.75)
+	gf.routing.route_single(
+		cal_circuit,
+		gc2_port,
+		mmi_in_port,
+		cross_section=cs_sin,
+		radius=bend_radius,
+		auto_taper=False,
+	)
+
+	# MMI outputs -> GC3 and GC4 (ordered top-to-bottom)
+	mmi_o2 = mmi_ports.get("o2")
+	mmi_o3 = mmi_ports.get("o3")
+	if not mmi_o2 or not mmi_o3:
+		raise ValueError("MMI output ports o2/o3 not found")
+
+	mmi_out_sorted = sorted([mmi_o2, mmi_o3], key=lambda p: p.center[1], reverse=True)
+	gc_targets = [
+		_make_port_compatible(list(gc_refs[3].ports)[0], SIN_LAYER, 0.75),
+		_make_port_compatible(list(gc_refs[2].ports)[0], SIN_LAYER, 0.75),
+	]
+
+	gf.routing.route_bundle(
+		cal_circuit,
+		[_make_port_compatible(mmi_out_sorted[0], SIN_LAYER, 0.75), _make_port_compatible(mmi_out_sorted[1], SIN_LAYER, 0.75)],
+		gc_targets,
+		cross_section=cs_sin,
+		radius=bend_radius,
+		sort_ports=False,
+		separation=10.0,
+		auto_taper=False,
+	)
+
+	# 4) Place this subcircuit at requested relative position in die
+	cal_ref = parent_cell << cal_circuit
+	cal_ref.move(origin)
+	_ = mmi_ref
+	return cal_ref
+
+
 def add_material_loss_calibration(
 	circuit: gf.Component,
 	input_gc_origin: tuple[float, float],
@@ -2098,7 +2196,7 @@ def build_from_template(
 			waveguide_width=0.75,
 			waveguide_layer=SIN_LAYER,
 			bend_radius=25.0,
-			orientation="west",
+			orientation="west"
 		)
 
 		add_material_loss_calibration_array(
@@ -2109,6 +2207,16 @@ def build_from_template(
 			waveguide_length_increment=100.0,
 			gc_spacing=127/3,
 			circuit_name=None,
+		)
+
+		add_mmi_splitter_calibration(
+			parent_cell=subdie_2,
+			origin=(500, -178),
+			gc_pitch=127.0,
+			mmi_shift_x=50.0,
+			mmi_shift_y=0.0,
+			bend_radius=50.0,
+			label_prefix="SPL",
 		)
 
 
