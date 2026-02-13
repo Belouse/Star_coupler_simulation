@@ -10,9 +10,10 @@ import warnings
 import uuid
 import gdsfactory as gf
 import ubcpdk
+import os
 
 from star_coupler import star_coupler
-
+from MMI_ANT_TE_3dB import my_mmi_3db
 
 # Suppress gdsfactory warnings about width being ignored when a cross_section is provided
 warnings.filterwarnings("ignore", message=".*ignored for cross_section.*")
@@ -699,7 +700,8 @@ def add_mmi_coupler(
 	Returns:
 		Dict with 'ref' and 'ports' (input and output ports).
 	"""
-	mmi = ubcpdk.cells.ANT_MMI_1x2_te1550_3dB_BB()
+
+	mmi = my_mmi_3db()
 	mmi_ref = circuit << mmi
 	
 	# Position and rotate
@@ -2117,15 +2119,21 @@ def export_gds(component: gf.Component, output_dir: Path = OUTPUT_DIR) -> Path:
 
 
 def main() -> None:
-	"""Entry point for step 1."""
+    """Entry point for step 1."""
+    
+    # 1. Circuit construction
+    chip = build_from_template()
+    
+    # 2. Export final GDS
+    out_path = export_gds(chip)
+    print(f"GDS exported to: {out_path}")
+    
 
-	chip = build_from_template()
-	out_path = export_gds(chip)
-	print(f"GDS exported to: {out_path}")
-	chip.show()
+    cache_folder = ROOT_DIR / "build" / "oas" / "components"
+    os.makedirs(cache_folder, exist_ok=True)
 
-
-
+    # 3. Visualisation
+    chip.show()
 
 if __name__ == "__main__":
-	main()
+    main()
