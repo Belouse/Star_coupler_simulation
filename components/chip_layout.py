@@ -2071,7 +2071,7 @@ def generate_SC_circuit(
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TEMPLATE_GDS = ROOT_DIR / "components" / "Yulong_Yang_v1.gds"
+TEMPLATE_GDS = ROOT_DIR / "components" / "Yulong_Yang_v2.gds"
 TEMPLATE_TOP_CELL = "Top_CustomTemplate"
 OUTPUT_DIR = ROOT_DIR / "output" / "gds"
 
