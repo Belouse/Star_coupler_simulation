@@ -7,9 +7,9 @@ import numpy as np
 
 # Configuration: Plot all wavelengths or only closest to 1.55um
 PLOT_ALL_WAVELENGTHS = False
-PLOT_AMPLITUDE = False
+PLOT_AMPLITUDE = True
 PLOT_PHASE = False
-PLOT_PHASE_AMPLITUDE = True
+PLOT_PHASE_AMPLITUDE = False
 PLOT_PHASE_SHIFT_AMPLITUDE = False
 PLOT_PHASE_FOR_ALL_SOURCES = False
 PLOT_PHASE_ERROR_FOR_ALL_SOURCES = False
@@ -175,6 +175,58 @@ def plot_phase_shift(data, ref="freq_monitor_out1", target="freq_monitor_out2"):
     plt.xlabel("Wavelength (um)")
     plt.ylabel("Phase shift (deg)")
     plt.grid(True, alpha=0.3)
+
+
+def plot_amplitude_all_sources(sources_data, max_sources=5):
+    """Plot amplitude for all sources on one figure.
+    
+    Creates a single plot with one line per input source.
+    X-axis: output port number (1, 2, 3, 4)
+    Y-axis: power/transmission
+    """
+    num_sources = min(len(sources_data), max_sources)
+    if num_sources == 0:
+        return
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    colors = ['red', 'blue', 'green', 'orange', 'purple']
+    
+    for idx, (source_name, data) in enumerate(sorted(sources_data.items())[:max_sources]):
+        monitors = sorted(data.keys())
+        
+        # Extract output port numbers and transmissions
+        output_numbers = []
+        transmissions = []
+        
+        for monitor in monitors:
+            try:
+                # Extract output number from monitor name (e.g., "freq_monitor_out1" -> 1)
+                monitor_display = _display_monitor_name(monitor)
+                if "out" in monitor_display:
+                    out_num = int(monitor_display.replace("out", ""))
+                    output_numbers.append(out_num)
+                    # Use first wavelength point (single wavelength when PLOT_ALL_WAVELENGTHS=False)
+                    transmissions.append(data[monitor]["transmission"][0])
+            except (KeyError, ValueError, IndexError):
+                continue
+        
+        if output_numbers and transmissions:
+            # Sort by output number
+            sorted_pairs = sorted(zip(output_numbers, transmissions))
+            output_numbers, transmissions = zip(*sorted_pairs)
+            
+            ax.plot(output_numbers, transmissions, '-',
+                   color=colors[idx % len(colors)], linewidth=2, 
+                   marker='o', markersize=8, label=f"Input {source_name}")
+    
+    ax.set_xlabel("Output Port Number", fontsize=12)
+    ax.set_ylabel("Power (Transmission)", fontsize=12)
+    #ax.set_title("Power at each output port for all input sources", fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=10)
+    ax.set_xticks(range(1, 5))
+    fig.tight_layout()
 
 
 def _get_reference_monitor_name(data, candidates=("output_i1", "freq_monitor_out1")):
@@ -535,6 +587,10 @@ def main():
     for source_name, data in sources_data.items():
         filtered_sources_data[source_name] = data if PLOT_ALL_WAVELENGTHS else filter_to_closest_wavelength(data, target_wavelength=1.55)
     
+    # Plot amplitude for all sources in one figure
+    if PLOT_AMPLITUDE:
+        plot_amplitude_all_sources(filtered_sources_data)
+    
     # Plot data for each source
     for source_name in sorted(sources_data.keys()):
         data = sources_data[source_name]
@@ -549,8 +605,8 @@ def main():
             print(f"  Wavelength: {wl:.5f} μm")
         
         # Create plots for this source based on flags
-        if PLOT_AMPLITUDE or PLOT_PHASE:
-            plot_amplitude_and_phase_for_source(plot_data, source_name)
+        if PLOT_PHASE:
+            plot_phase_for_source(plot_data, source_name)
 
         if PLOT_PHASE_AMPLITUDE:
             # Absolute phasor diagram
