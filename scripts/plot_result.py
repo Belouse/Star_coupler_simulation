@@ -6,17 +6,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Configuration: Plot all wavelengths or only closest to 1.55um
-PLOT_ALL_WAVELENGTHS = True
+PLOT_ALL_WAVELENGTHS = False
 PLOT_AMPLITUDE = False
 PLOT_PHASE = False
-PLOT_PHASE_AMPLITUDE = False
+PLOT_PHASE_AMPLITUDE = True
 PLOT_PHASE_SHIFT_AMPLITUDE = False
-PLOT_PHASE_FOR_ALL_SOURCES = True
+PLOT_PHASE_FOR_ALL_SOURCES = False
 PLOT_PHASE_ERROR_FOR_ALL_SOURCES = False
 
 
 # Path to the simulation results (last block after the final "Source:" marker is used)
-DATA_PATH = Path(r"C:\\Users\\Éloi Blouin\\Desktop\\git\\Star_coupler_simulation\\output\\simulations\\star_coupler_S_matrix_V9.txt")
+DATA_PATH = Path(r"C:\\Users\\Éloi Blouin\\Desktop\\git\\Star_coupler_simulation\\output\\simulations\\star_coupler_S_matrix_V8.txt")
 
 
 def load_all_sources(path: Path):
@@ -225,9 +225,13 @@ def plot_polar_phase_for_source(data, source_name):
                 ha='center', va='bottom', fontsize=9, fontweight='bold')
     
     ax.set_ylim(0, 0.15)
-    ax.set_title(f"Phase and amplitude phasor diagram - Source {source_name}", pad=20, fontsize=12, fontweight='bold')
     ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
     ax.grid(True)
+    
+    # Save figure
+    output_dir = Path(r"C:\Users\Éloi Blouin\Desktop\git\Star_coupler_simulation\output\Picture\plot")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_dir / f"phasor_absolute_source_{source_name}.png", dpi=300, bbox_inches='tight')
 
 
 def _get_reference_monitor_name(data, candidates=("output_i1", "freq_monitor_out1")):
@@ -277,10 +281,13 @@ def plot_polar_phase_referenced_for_source(data, source_name, reference_monitor=
                 ha='center', va='bottom', fontsize=9, fontweight='bold')
 
     ax.set_ylim(0, 0.15)
-    ax.set_title(f"Phasor diagram referenced to {ref_name} = 0° - Source {source_name}",
-                 pad=20, fontsize=12, fontweight='bold')
     ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
     ax.grid(True)
+    
+    # Save figure
+    output_dir = Path(r"C:\Users\Éloi Blouin\Desktop\git\Star_coupler_simulation\output\Picture\plot")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_dir / f"phasor_referenced_source_{source_name}.png", dpi=300, bbox_inches='tight')
 
 
 def plot_polar_phase(data):
@@ -413,8 +420,6 @@ def plot_phase_shift_all_sources(sources_data, max_sources=5, plot_all_wavelengt
                 phase_rad = np.radians(phase_rel_deg)
                 ax.arrow(phase_rad, 0, 0, magnitude, head_width=0.1, head_length=0.01,
                          fc=color, ec=color, linewidth=2.5, label=_display_monitor_name(monitor))
-                ax.text(phase_rad, magnitude + 0.01, f"{_display_monitor_name(monitor)}\n{phase_rel_deg:.1f}°",
-                        ha='center', va='bottom', fontsize=8, fontweight='bold')
 
             ax.set_ylim(0, 0.15)
             desired_phase = desired_source_phases.get(source_name, 0)
