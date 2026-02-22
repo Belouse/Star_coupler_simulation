@@ -7,16 +7,17 @@ import numpy as np
 
 # Configuration: Plot all wavelengths or only closest to 1.55um
 PLOT_ALL_WAVELENGTHS = False
-PLOT_AMPLITUDE = True
+PLOT_AMPLITUDE = False
 PLOT_PHASE = False
 PLOT_PHASE_AMPLITUDE = False
 PLOT_PHASE_SHIFT_AMPLITUDE = False
 PLOT_PHASE_FOR_ALL_SOURCES = False
 PLOT_PHASE_ERROR_FOR_ALL_SOURCES = False
+PLOT_PHASE_VS_WAVELENGTH = True
 
 
 # Path to the simulation results (last block after the final "Source:" marker is used)
-DATA_PATH = Path(r"C:\\Users\\Éloi Blouin\\Desktop\\git\\Star_coupler_simulation\\output\\simulations\\star_coupler_S_matrix_V8.txt")
+DATA_PATH = Path(r"C:\\Users\\Éloi Blouin\\Desktop\\git\\Star_coupler_simulation\\output\\simulations\\star_coupler_S_matrix_V9.txt")
 
 
 def load_all_sources(path: Path):
@@ -227,6 +228,89 @@ def plot_amplitude_all_sources(sources_data, max_sources=5):
     ax.legend(fontsize=10)
     ax.set_xticks(range(1, 5))
     fig.tight_layout()
+
+
+def plot_phase_vs_wavelength_all_sources(sources_data, max_sources=5):
+    """Plot phase shift vs wavelength for all sources.
+    
+    Creates 4 subplots (one per output port).
+    Each subplot shows the phase of one output port for all 5 input sources
+    as a function of wavelength. Phase is relative to out1 for each source.
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
+    
+    colors = ['red', 'blue', 'green', 'orange', 'purple']
+    output_ports = ['out2', 'out3', 'out4', 'out1']  # out1 as reference shown separately
+    
+    for out_idx, output_port in enumerate(output_ports):
+        ax = axes[out_idx]
+        
+        for source_idx, (source_name, data) in enumerate(sorted(sources_data.items())[:max_sources]):
+            monitors = sorted(data.keys())
+            
+            # Get reference monitor (out1)
+            ref_monitor = None
+            target_monitor = None
+            
+            for monitor in monitors:
+                monitor_display = _display_monitor_name(monitor)
+                if "out1" in monitor_display:
+                    ref_monitor = monitor
+                if output_port in monitor_display:
+                    target_monitor = monitor
+            
+            if ref_monitor is None or ref_monitor not in data:
+                continue
+            
+            if target_monitor is None or target_monitor not in data:
+                continue
+            
+            # Get reference and target phase data
+            ref_wavelengths = data[ref_monitor]["wavelength"]
+            ref_phases = data[ref_monitor]["phase_deg"]
+            
+            target_wavelengths = data[target_monitor]["wavelength"]
+            target_phases = data[target_monitor]["phase_deg"]
+            
+            if not ref_wavelengths or not target_wavelengths:
+                continue
+            
+            # Calculate phase shift relative to out1
+            phase_shifts = []
+            common_wavelengths = []
+            
+            for wl, ph in zip(target_wavelengths, target_phases):
+                # Find corresponding reference phase at this wavelength
+                if wl in ref_wavelengths:
+                    ref_idx = ref_wavelengths.index(wl)
+                    phase_shift = ph - ref_phases[ref_idx]
+                    
+                    # Normalize to [-180, 180]
+                    while phase_shift > 180:
+                        phase_shift -= 360
+                    while phase_shift < -180:
+                        phase_shift += 360
+                    
+                    phase_shifts.append(phase_shift)
+                    common_wavelengths.append(wl)
+            
+            if common_wavelengths:
+                ax.plot(common_wavelengths, phase_shifts,
+                       color=colors[source_idx % len(colors)], linewidth=2,
+                       marker='o', markersize=4, 
+                       label=f"Input {source_name}")
+        
+        ax.set_xlabel("Wavelength (μm)", fontsize=11)
+        ax.set_ylabel("Phase Shift (deg)", fontsize=11)
+        ax.set_title(f"Output {output_port} (relative to out1)", 
+                    fontsize=11, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=9)
+    
+    fig.suptitle("Phase shift vs wavelength for all outputs and inputs", 
+                fontsize=14, fontweight='bold')
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
 
 
 def _get_reference_monitor_name(data, candidates=("output_i1", "freq_monitor_out1")):
@@ -621,6 +705,10 @@ def main():
     # Plot all sources phase errors in one figure with subplots
     if PLOT_PHASE_ERROR_FOR_ALL_SOURCES:
         plot_phase_error_all_sources(filtered_sources_data)
+    
+    # Plot phase vs wavelength for all sources
+    if PLOT_PHASE_VS_WAVELENGTH:
+        plot_phase_vs_wavelength_all_sources(sources_data)
     
     plt.show()
 
